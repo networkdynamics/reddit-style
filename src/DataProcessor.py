@@ -4,7 +4,124 @@ This file defines all methods used to process data before we pass it through the
 """
 from recordclass import recordclass
 import numpy as np
+import pickle
+import os
+from pymongo import MongoClient
+import re
+# returns list of tuples, with restrictions
+'''
+    The output is a dictionary. Key is the subreddit-name; Value is a dictionary itself.
+    That inner dictionary's Key is a ('user1', 'user2') tuple; Value is a list lists (basically a list of threads in that subreddit.) The inner list always has two elements/strings in it.
+'''
 
+# TODO: not great to have dict as default value but like whatever
+def get_data_mongo(subreddit, daterange, cached_data_path,
+                   fields={"created_time": 1, "body": 1, "parent_id": 1, "link_id": 1, "author": 1, "score": 1}):
+    start = daterange[0]
+    end = daterange[1]
+    client = MongoClient(serverSelectionTimeoutMS=30, connectTimeoutMS=20000)
+    db = client.reddit
+    comments = db.comms
+
+    all_data_file_path = cached_data_path + subreddit + "_" + start.strftime("%B%d_%Y") + "_" + \
+                         end.strftime("%B%d_%Y") + ".pickle"
+
+    # TODO: This could be really big
+    if os.path.exists(all_data_file_path):
+        print "Yay, we have it."
+        indexed_subreddit_data = pickle.load(open(all_data_file_path, "r"))
+
+    else:
+        print "Didn't already have it :("
+        subreddit_data = list(comments.find({"subreddit": subreddit, 'created_time': {'$gte': start, '$lt': end}},
+                                                 fields))
+        indexed_subreddit_data = dict()
+        for comment in subreddit_data:
+            indexed_subreddit_data[comment["_id"]] = comment
+
+        pickle.dump(indexed_subreddit_data, open(all_data_file_path, "w"))
+    return indexed_subreddit_data
+
+
+def get_all_data_mongo(subreddit_list, daterange, cached_data_path,
+                       fields={"created_time": 1, "body": 1, "parent_id": 1, "link_id": 1, "author": 1, "score": 1}):
+    for subreddit in subreddit_list:
+        get_data_mongo(subreddit, daterange, cached_data_path, fields)
+
+
+def create_userpair_tuples(indexed_data, max_pairs, min_convo_length=2, min_string_length=None, remove_deleted_users=True):
+
+    all_basic_comment_tuples = {}
+
+    total_so_far = 0
+
+    all_link_ids = dict()
+
+    for comment in indexed_data:
+
+        parent_id = indexed_data[comment]["parent_id"][3:]
+        link_id = indexed_data[comment]["link_id"][3:]
+        id = indexed_data[comment]["_id"]
+
+        if link_id not in all_link_ids:
+            all_link_ids[link_id] = list()
+
+        all_link_ids[link_id].append((id, parent_id))
+
+    comment_tuples = dict()
+    for link in all_link_ids:
+        if total_so_far > max_pairs:
+            break
+        for paren_child in all_link_ids[link]:
+            if total_so_far > max_pairs:
+                break
+            id, parent_id = paren_child
+            if (id in indexed_data) and (parent_id in indexed_data):
+
+                if min_string_length:
+                    if len(indexed_data[id]["body"]) < min_string_length:
+                        continue
+                    if len(indexed_data[parent_id]["body"]) < min_string_length:
+                        continue
+
+                par = indexed_data[parent_id]["author"]
+                chil = indexed_data[id]["author"]
+                par = par.encode('ascii', 'ignore')
+                chil = chil.encode('ascii', 'ignore')
+
+                # Deleted users filter:
+                if remove_deleted_users:
+                    if ("deleted" in par) or ("deleted" in chil):
+                        continue
+
+                    if par in chil:
+                        continue
+
+                if (par, chil) not in comment_tuples:
+                    comment_tuples[(par, chil)] = list()
+
+                parent_body = indexed_data[parent_id]["body"]
+                child_body = indexed_data[id]["body"]
+
+                regex = re.compile('[^a-zA-Z]')
+                if parent_body is not "" and child_body is not "":
+                    parent_body = parent_body.encode('utf-8').strip()
+                    child_body = child_body.encode('utf-8').strip()
+                    parent_body = regex.sub(' ', parent_body)
+                    child_body = regex.sub(' ', child_body)
+                    comment_tuples[(par, chil)].append([str(parent_body), str(child_body)])
+                    total_so_far += 1
+
+    for interac in comment_tuples:
+        if len(comment_tuples[interac]) > min_convo_length:
+            all_basic_comment_tuples[interac] = comment_tuples[interac]
+
+    return all_basic_comment_tuples
+
+
+def all_create_userpair_tuples(all_raw_data):
+    for s in all_raw_data:
+        create_userpair_tuples(all_raw_data[s])
 
 # thanks to https://stackoverflow.com/questions/34964878/python-generate-a-dictionarytree-from-a-list-of-tuples
 def order_comment_threads(list_of_parent_child_tuples):
