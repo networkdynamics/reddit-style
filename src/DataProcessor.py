@@ -8,15 +8,18 @@ import pickle
 import os
 from pymongo import MongoClient
 import re
-# returns list of tuples, with restrictions
-'''
-    The output is a dictionary. Key is the subreddit-name; Value is a dictionary itself.
-    That inner dictionary's Key is a ('user1', 'user2') tuple; Value is a list lists (basically a list of threads in that subreddit.) The inner list always has two elements/strings in it.
-'''
 
 # TODO: not great to have dict as default value but like whatever
 def get_data_mongo(subreddit, daterange, cached_data_path,
                    fields={"created_time": 1, "body": 1, "parent_id": 1, "link_id": 1, "author": 1, "score": 1}):
+    """
+    Gets the data for the subreddit given t
+    :param subreddit: The subreddit
+    :param daterange: A tuple of (start, end) datetime objects
+    :param cached_data_path: The path for all the cached data
+    :param fields: the mongo argument for fields to include
+    :return:
+    """
     start = daterange[0]
     end = daterange[1]
     client = MongoClient(serverSelectionTimeoutMS=30, connectTimeoutMS=20000)
@@ -26,13 +29,12 @@ def get_data_mongo(subreddit, daterange, cached_data_path,
     all_data_file_path = cached_data_path + subreddit + "_" + start.strftime("%B%d_%Y") + "_" + \
                          end.strftime("%B%d_%Y") + ".pickle"
 
-    # TODO: This could be really big
     if os.path.exists(all_data_file_path):
-        print "Yay, we have it."
+        #print "Yay, we have it." #TODO: change these to logger statements
         indexed_subreddit_data = pickle.load(open(all_data_file_path, "r"))
 
     else:
-        print "Didn't already have it :("
+        #print "Didn't already have it :("
         subreddit_data = list(comments.find({"subreddit": subreddit, 'created_time': {'$gte': start, '$lt': end}},
                                                  fields))
         indexed_subreddit_data = dict()
@@ -40,16 +42,38 @@ def get_data_mongo(subreddit, daterange, cached_data_path,
             indexed_subreddit_data[comment["_id"]] = comment
 
         pickle.dump(indexed_subreddit_data, open(all_data_file_path, "w"))
+
     return indexed_subreddit_data
 
 
 def get_all_data_mongo(subreddit_list, daterange, cached_data_path,
                        fields={"created_time": 1, "body": 1, "parent_id": 1, "link_id": 1, "author": 1, "score": 1}):
-    for subreddit in subreddit_list:
-        get_data_mongo(subreddit, daterange, cached_data_path, fields)
+    """
+    Gets all the data for the given subreddit list for the date range
+    :param subreddit_list: A list of subreddits
+    :param daterange: A tuple of (start, end) datetime objects
+    :param cached_data_path: The path for all the cached data
+    :param fields: the mongo argument for fields to include
+    :return:
+    """
+    all_indexed_subreddit_data = {}
+    for s in subreddit_list:
+        d = get_data_mongo(s, daterange, cached_data_path, fields)
+        all_indexed_subreddit_data[s] = d
 
+    return all_indexed_subreddit_data
 
-def create_userpair_tuples(indexed_data, max_pairs, min_convo_length=2, min_string_length=None, remove_deleted_users=True):
+def create_userpair_tuples(indexed_data, max_pairs, min_convo_length=2, min_string_length=None, remove_deleted_users=True, allow_user_pair_duplicates=False):
+    """
+    Creates a dictionary of tuples with key being the user_pair.
+    :param indexed_data: A list of comments, indexed on ID
+    :param max_pairs: Maxiumum number of pairs. Used if you have a lot more data than you need
+    :param min_convo_length: The minimum length of a conversation (continuous interactions) before inclusion
+    :param min_string_length: The minimum string length for a comment to be included in a conversation
+    :param remove_deleted_users: Whether to remove deleted users from contention
+    :param allow user_pair_duplicates #TODO: add this, so we're sampling correctly
+    :return: The dictionary of a list of tuples, where the key is the user_pair
+    """
 
     all_basic_comment_tuples = {}
 
@@ -119,9 +143,18 @@ def create_userpair_tuples(indexed_data, max_pairs, min_convo_length=2, min_stri
     return all_basic_comment_tuples
 
 
-def all_create_userpair_tuples(all_raw_data):
-    for s in all_raw_data:
-        create_userpair_tuples(all_raw_data[s])
+def all_create_userpair_tuples(all_indexed_subreddit_data):
+    """
+    Create userpair tuples for all subreddits
+    :param all_indexed_subreddit_data: A dictionary of subreddit:data where data is a list of all comments
+    :return: A dictionary of subreddit: data where data is a dictionary with userpairs:tuplelist
+    """
+    all_userpair_tuples = {}
+    for s in all_indexed_subreddit_data:
+        d = create_userpair_tuples(all_indexed_subreddit_data[s])
+        all_userpair_tuples[s] = d
+    return all_userpair_tuples
+
 
 def write_txt_accommodation(interactions, subreddit, file_path):
     """
@@ -173,7 +206,7 @@ def write_all_accommodation(all_interactions, subreddit_list, file_path):
     
     for subreddit in subreddit_list:
         print "Writing accommodation TXTs for: ", subreddit
-        write_to_txt_accommodation(all_interactions[subreddit], file_path, subreddit)
+        write_txt_accommodation(all_interactions[subreddit], file_path, subreddit)
 
 
 
