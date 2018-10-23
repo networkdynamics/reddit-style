@@ -18,7 +18,7 @@ def get_data_mongo(subreddit, daterange, cached_data_path,
     :param daterange: A tuple of (start, end) datetime objects
     :param cached_data_path: The path for all the cached data
     :param fields: the mongo argument for fields to include
-    :return:
+    :return: the comment data indexed on the commment_id
     """
     start = daterange[0]
     end = daterange[1]
@@ -54,7 +54,7 @@ def get_all_data_mongo(subreddit_list, daterange, cached_data_path,
     :param daterange: A tuple of (start, end) datetime objects
     :param cached_data_path: The path for all the cached data
     :param fields: the mongo argument for fields to include
-    :return:
+    :return: all indexed subreddit data, a dictionary with subreddit:data
     """
     all_indexed_subreddit_data = {}
     for s in subreddit_list:
