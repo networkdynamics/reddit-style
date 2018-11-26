@@ -50,24 +50,30 @@ def get_relevant_text_bodies(subreddit_list, start_year, start_month, end_month)
 
     return text_bodies
 
-def subreddit_language_model(subreddit_list, start_year, start_month, end_month, ngrams, text_min, text_max, base_path = "../data/subreddit_language_models/"):
+def load_language_model(subreddit, start_year, start_month, end_month, ngrams, text_min, text_max, base_path = "../data/subreddit_language_models/"):
+    #TODO fix with args and such
+    verify_subreddit_language_model([subreddit], start_year, start_month, end_month, ngrams, text_min, text_max, base_path = "../data/subreddit_language_models/" )
+    # TODO: this file name thing is dumb
+    file_name = "{}_{}_{}_{}_{}_{}_{}.pkl".format(subreddit, start_year, start_month, end_month, ngrams, text_min,
+                                                  text_max)
+    file_path = base_path + file_name
+    lm = pickle.load(open(file_path, "rb"))
+    return lm
+
+def verify_subreddit_language_model(subreddit_list, start_year, start_month, end_month, ngrams, text_min, text_max, base_path = "../data/subreddit_language_models/"):
     """
     Search to see if you have a cached language model. If so, load into memory and return.
     If not, create the language model, cache it and return.
     :param subreddit: the subreddit
     :param date_range: the date range, as a datetime tuple (start, end)
-    :return: lm the language model
+    :return: None
     """
     new_subreddit_list = []
     for subreddit in subreddit_list:
         file_name = "{}_{}_{}_{}_{}_{}_{}.pkl".format(subreddit, start_year, start_month, end_month, ngrams, text_min, text_max)
         file_path = base_path + file_name
 
-        try:
-            # suggestions? would rather not pickle.
-            lm = pickle.load(open(file_path, "rb"))
-            return lm
-        except IOError:
+        if not os.path.isfile(file_path):
             print "looks like it doesn't exist, creating {} language model from scratch".format(subreddit)
             new_subreddit_list.append(subreddit)
 
@@ -133,8 +139,7 @@ def text_similarity_nltk_everygrams(texts, lm):
     res = []
     for text in texts:
         tokens = list(flatten(pad_both_ends(sent, n=2) for sent in text))  # now get ngrams and bigrams, padded
-
-        res.append(lm.entropy(text))
+        res.append(1/lm.entropy(tokens))
 
     return res
 
