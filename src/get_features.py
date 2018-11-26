@@ -124,4 +124,4 @@ def get_prior_interactions(user1, user2, time_period=None, subreddit=None):
                 if comm[0]["author"] in user_list[i+1]:
                     prior_interactions += 1
 
-
+    return prior_interactions
