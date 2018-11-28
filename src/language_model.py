@@ -41,14 +41,23 @@ def get_relevant_text_bodies(subreddit_list, start_year, start_month, end_month)
             file_path = base_path + f
             fop = gzip.open(file_path, 'rb')
             for line in fop:
-                if any(subreddit_key in line for subreddit_key in subreddit_keys):  # aka is a top_level comment
+                if any(subreddit_key in line for subreddit_key in subreddit_keys):
                     #body = re.search('\"body\":\"(.+?)\"(,\")|(})', line).group(1)
                     comm = json.loads(line)
                     body = comm["body"] #these two options appear to the be the same speed.
-                    subreddit = comm["subreddit"]
-                    text_bodies[subreddit].append(body)
+                    if body == "[deleted]" or body == "[removed]":
+                        continue
 
+                    subreddit = comm["subreddit"]
+
+                    # If it is a top level comment, len(tuple) will be 2:
+                    if comm["parent_id"].startswith('t3_'):
+                        text_bodies[subreddit].append((body, 'Top_Level_Comment'))
+
+                    else: # len(tuple) would be 1
+                        text_bodies[subreddit].append((body,))
     return text_bodies
+
 
 def load_language_model(subreddit, start_year, start_month, end_month, ngrams, text_min, text_max, base_path = "../data/subreddit_language_models/"):
     #TODO fix with args and such
@@ -86,10 +95,21 @@ def verify_subreddit_language_model(subreddit_list, start_year, start_month, end
 
         text_list = comment_list[subreddit]
         text = []
-        for comm_text in text_list:
+        for tup in text_list:
+            # Skip top-level comments while training LM:
+            if len(tup) == 2:
+                continue
+            # Sanity check:
+            elif len(tup) != 1:
+                print "Not possible: ", tup
+                continue
+            else:
+                comm_text = tup[0]
+
             res = preprocess_text(comm_text, text_max, text_min)
             if res:
                 text.append(res)
+
         all_sents = [item for sublist in text for item in sublist]
         lm = create_language_model_nltk_everygrams(all_sents, ngrams=2)
         pickle.dump(lm, open(file_path, "wb"), protocol=pickle.HIGHEST_PROTOCOL)
@@ -142,5 +162,3 @@ def text_similarity_nltk_everygrams(texts, lm):
         res.append(1/lm.entropy(tokens))
 
     return res
-
-
