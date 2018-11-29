@@ -25,6 +25,9 @@ def testing_language_model_match():
     #lm = language_model.load_language_model(subreddit, start_year, start_month, end_month, ngrams, text_min, text_max)
     d = get_features.load_pairs("../data/2015_duplicates/all_pairs_2015.txt")
 
+def test_get_prior_interaction():
 
+    prior_interactions = get_features.get_prior_interactions("AJinxyCat", "edcsociety")
+    print prior_interactions
 if __name__ == "__main__":
-    testing_language_model_match()
+    test_get_prior_interaction()

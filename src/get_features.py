@@ -7,37 +7,37 @@ from collections import defaultdict
 import json
 from sshtunnel import SSHTunnelForwarder
 import pymongo
+import pprint
 import atexit
 import datetime
 
+def start_server():
 
-# TODO: encapsulate hack
+    MONGO_HOST = "132.206.3.193"
+    MONGO_DB = "reddit"
+    MONGO_USER = "carmst16"
 
-MONGO_HOST = "132.206.3.193"
-MONGO_DB = "reddit"
-MONGO_USER = "carmst16"
+    server = SSHTunnelForwarder(
+        MONGO_HOST,
+        ssh_pkey="/home/ndg/users/carmst16/.ssh/id_rsa",
+        ssh_username=MONGO_USER,
+        remote_bind_address = ("127.0.0.1", 27017)
+    )
 
+    server.start()
 
-server = SSHTunnelForwarder(
-    MONGO_HOST,
-    ssh_pkey="/home/ndg/users/carmst16/.ssh/id_rsa",
-    ssh_username=MONGO_USER,
-    remote_bind_address = ("127.0.0.1", 27017)
-)
+    client = pymongo.MongoClient("127.0.0.1", server.local_bind_port)
+    db = client[MONGO_DB]
 
-server.start()
+    dbcomments = db.comms
+    dbposts = db.posts
 
-client = pymongo.MongoClient("127.0.0.1", server.local_bind_port)
-db = client[MONGO_DB]
+    def exit_handler():
+        server.stop()
 
-dbcomments = db.comms
-dbposts =  db.posts
+    atexit.register(exit_handler)
 
-def exit_handler():
-    server.stop()
-
-atexit.register(exit_handler)
-
+    return dbcomments, dbposts
 
 def load_pairs(file_path):
     """
@@ -49,7 +49,6 @@ def load_pairs(file_path):
     with open(file_path, "rb") as f:
         for line in f:
             line = line.split("} {") #TODO: fix. saved file wrong
-            print line
             parent = json.loads(line[0]+ "}")
             child = json.loads("{" + line[1])
 
@@ -57,7 +56,6 @@ def load_pairs(file_path):
 
             pairs[subreddit].append((parent, child))
 
-    print len(pairs)
     return pairs
 
 
@@ -99,6 +97,8 @@ def create_query(author, time_period, subreddit):
     if subreddit:
         query_dict['subreddit'] = subreddit
 
+    return query_dict
+
 
 def get_prior_interactions(user1, user2, time_period=None, subreddit=None):
     """
@@ -110,18 +110,21 @@ def get_prior_interactions(user1, user2, time_period=None, subreddit=None):
     :param subreddit: the subreddit
     :return: a number
     """
-
+    dbcomments, _ = start_server()
     prior_interactions = 0
     user_list = [user1, user2]
     for i in range(len(user_list)):
+        if i == 1:
+            i_r = 0  #this needs help..
+        else:
+            i_r = 1
         query = create_query(user_list[i], time_period, subreddit)
         return_fields = {"parent_id":1}
-        poss = list(dbcomments.find(query, return_fields))
+        poss = dbcomments.find(query, return_fields)
         for comm in poss:
             parent_id = comm["parent_id"]
             if "t1_" in parent_id:
-                comm = list(dbcomments.find({"name": parent_id}))
-                if comm[0]["author"] in user_list[i+1]:
+                comm = dbcomments.find_one({"_id": parent_id[3:]}, {"author": 1})
+                if comm["author"] in user_list[i_r]:
                     prior_interactions += 1
-
     return prior_interactions
