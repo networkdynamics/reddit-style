@@ -6,7 +6,7 @@ import os
 import language_model
 import get_features
 
-
+#THE FUNCTION HAS SINCE BEEN CHANGED
 def get_2015_pairs_duplicates_included():
 
     data_dir = "/home/ndg/users/carmst16/reddit-style/data/2015_duplicates"
@@ -18,6 +18,16 @@ def get_2015_pairs_duplicates_included():
     # parallel - j100 - -no - notice
     # python
     # extract_pairs.py > ../data/2015_duplicates/all_pairs_2015.txt
+
+#RAN ON COMMAND LINE
+#dec 14 2018
+def get_all_jan_2016_data():
+    pass
+
+    #I ran the following
+
+    #"ls -d -1 /home/ndg/arc/reddit/2016/RC_2016-01-*.gz | parallel -j20 --pipe parallel -j100 --no-notice python extract_pairs.py"
+
 
 def testing_language_model_match():
     #subreddit_language_model(["AskReddit", "McGill"], 2015, 1, 2, 2, 0, 50)
