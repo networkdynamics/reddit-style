@@ -39,5 +39,26 @@ def test_get_prior_interaction():
 
     prior_interactions = get_features.get_prior_interactions("AJinxyCat", "edcsociety")
     print prior_interactions
+
+# dec 15 test
+def test_create_language_model_new_scheme():
+    subreddits = ["mcgill"]
+    year = 2016
+    start_month = 1
+    end_month = 2
+    ngrams = 2
+    text_min = 0
+    text_max = 100
+    base_path = "/home/ndg/projects/shared_datasets/reddit-style/"
+    lm = language_model.load_language_model(subreddits[0], year,
+                                                    start_month, end_month,
+                                                    ngrams, text_min, text_max,
+                                                    base_path)
+    print lm.vocab.lookup([('and')])
+    print lm.counts['and']
+    print lm.score("when", ["and"])
+    texts = ["hello mcgill what if I type a lot more. this is another sentence.", "you should check out minerva and service point", "this is me at a bank"]
+    res = language_model.text_similarity_nltk_everygrams(texts, lm, ngrams, text_min, text_max)
+    print res
 if __name__ == "__main__":
-    test_get_prior_interaction()
+    test_create_language_model_new_scheme()
