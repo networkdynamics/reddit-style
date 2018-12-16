@@ -2,16 +2,22 @@
 This file is where we pull in all the various features, essentially creating the values we will use for stats
 """
 import language_model
-import csv
 from collections import defaultdict
 import json
 from sshtunnel import SSHTunnelForwarder
 import pymongo
-import pprint
 import atexit
 import datetime
+import pandas as pd
+import numpy as np
+import extract_pairs
 
 def start_server():
+    """
+    Starts the mongo server and will shut it on exit
+    :return:
+    The comment and post cursor objects, can use to run queries.
+    """
 
     MONGO_HOST = "132.206.3.193"
     MONGO_DB = "reddit"
@@ -38,6 +44,128 @@ def start_server():
     atexit.register(exit_handler)
 
     return dbcomments, dbposts
+
+# TODO: store with HDFStore?  https://realpython.com/fast-flexible-pandas/
+def load_dataframe(year, start_month, end_month, base_path, contribtype="comment"):
+    """
+    Loads the appropriate data for the given dates. Base path is where your data is stored
+    Contribtype is either comments or posts.
+    :param year:
+    :param start_month:
+    :param end_month:
+    :param base_path:
+    :param contribtype: Either string "comment" or string "post", returns appropriate data
+    :return:
+    """
+
+    if "comment" in contribtype:
+        base_path_full = base_path + "comment_metadata/"
+
+        valid_file_paths = extract_pairs.list_file_appropriate_data_range(year,
+                                                                  start_month,
+                                                                  end_month,
+                                                                  base_path_full,
+                                                                )
+    elif "post" in contribtype:
+        base_path_full = base_path + "post_metadata/"
+
+        valid_file_paths = extract_pairs.list_file_appropriate_data_range(year,
+                                                                  start_month,
+                                                                  end_month,
+                                                                  base_path_full,
+                                                                  posts=True)
+    else:
+        raise ValueError("Not a valid contribtype")
+
+    print valid_file_paths
+
+    if not valid_file_paths:
+        raise ValueError("You haven't processed date ranges yet")
+
+    big_frame = pd.concat(
+        [pd.read_csv(f, sep=',', index_col=0, header=0,
+                     dtype={"karma":np.int32}) for f in valid_file_paths])
+
+    return big_frame
+
+def clean_dataframe(df):
+    """
+    Cleans the dataframe.
+    :param df:
+    :return: the dataframe. done in place however.
+    """
+    #remove all columns with user="[deleted]"
+    # in place maybe because I don't want to create another
+    df = df[df.author != "[deleted]"]
+
+    return df
+
+
+# TODO: refactor below to use apply ??
+# TODO: include replies to top-level posts?
+def get_user_interactions(user1, user2, df, subreddit=None):
+    """
+    Gets the number of times two users have interacted in
+    :param user1:
+    :param user2:
+    :param df:
+    :param subreddit: If value, then interactions only on that subreddit will be included.
+    Otherwise will integrate all data from that date range.
+    :return:
+    """
+
+    if not subreddit:
+        res = df.loc[((df['author'] == user1) & (df['parent_author'] == user2)) |
+           ((df['author'] == user2) & (df['parent_author'] == user1))]
+
+    if subreddit:
+        res = df.loc[((df['author'] == user1) & (df['parent_author'] == user2) & (df['subreddit'] == subreddit)) |
+               ((df['author'] == user2) & (df['parent_author'] == user1) & (df['subreddit'] == subreddit))]
+
+    return res.shape[0]
+
+
+def get_user_prolificness(user, comment_df, post_df, subreddit=None):
+    """
+    Get user prolificness for the data given. Sum of number of comments and posts.
+    If subreddit given will only include data for that subreddit.
+    :param user:
+    :param comment_df:
+    :param post_df:
+    :param subreddit:
+    :return:
+    """
+    if not subreddit:
+        res_comm = comment_df.loc[(comment_df['author'] == user)]
+        res_post = post_df.loc[(post_df['author'] == user)]
+
+    if subreddit:
+        res_comm = comment_df.loc[(comment_df['author'] == user) & (comment_df['subreddit'] == subreddit)]
+        res_post = post_df.loc[(post_df['author'] == user) & (post_df['subreddit'] == subreddit)]
+
+    return res_comm.shape[0] + res_post.shape[0]
+
+# TODO: double check logic here.
+def get_user_karma(user, comment_df, post_df, subreddit=None):
+    """
+    Get user karma for the given data. If subreddit given get data only for that subreddit
+    Sum of comment and post karma
+    :param user:
+    :param comment_df:
+    :param post_df:
+    :param subreddit:
+    :return:
+    """
+
+    if not subreddit:
+        comment_karma = comment_df.loc[(comment_df['author'] == user)]['karma'].sum()
+        post_karma = post_df.loc[(post_df['author'] == user)]['karma'].sum()
+    else:
+        comment_karma = comment_df.loc[(comment_df['author'] == user) & (comment_df['subreddit'] == subreddit)]['karma'].sum()
+        post_karma = post_df.loc[(post_df['author'] == user) & (post_df['subreddit'] == subreddit) ]['karma'].sum()
+
+    return comment_karma, post_karma
+
 
 def load_pairs(file_path):
     """

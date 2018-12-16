@@ -60,5 +60,26 @@ def test_create_language_model_new_scheme():
     texts = ["hello mcgill what if I type a lot more. this is another sentence.", "you should check out minerva and service point", "this is me at a bank"]
     res = language_model.text_similarity_nltk_everygrams(texts, lm, ngrams, text_min, text_max)
     print res
+
+def test_load_dataframe():
+    year = 2016
+    start_month = 1
+    end_month = 2
+    base_path = "/home/ndg/projects/shared_datasets/reddit-style/"
+
+    comment_df = get_features.load_dataframe(year, start_month, end_month, base_path)
+    comment_df.info(verbose=True, memory_usage=True)
+    comment_df = get_features.clean_dataframe(comment_df)
+    comment_df.info(verbose=True, memory_usage=True)
+    num_prior_interactions = get_features.get_user_interactions("AristocratPhoto", "aresef", comment_df)
+    print num_prior_interactions
+    post_df = get_features.load_dataframe(year, start_month, end_month, base_path, contribtype="post")
+
+    post_df.info(verbose=True, memory_usage=True)
+    karma = get_features.get_user_karma("aresef", comment_df, post_df)
+    print karma, "KARMA"
+    prolif = get_features.get_user_prolificness("aresef", comment_df, post_df)
+    print prolif, "PROLIF"
+
 if __name__ == "__main__":
-    test_create_language_model_new_scheme()
+    test_load_dataframe()

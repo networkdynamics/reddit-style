@@ -12,9 +12,8 @@ from nltk import word_tokenize
 import pickle
 import os
 import json
-import gzip
-import re
 import csv
+import extract_pairs
 
 from collections import defaultdict
 
@@ -33,32 +32,28 @@ def get_relevant_text_bodies(subreddit_list, start_year, start_month, end_month,
     text_bodies = defaultdict(lambda: [])
 
     #this really should be done using bash brace expansion...
-    paths = []
-    for month in range(start_month, end_month+1):
-        month = '{:02d}'.format(month)
-        paths.append("RC_{}-{}-01".format(start_year, month))
-    base_path_text = base_path + "non_top_level_comments/"
-    subreddit_keys = ['subreddit":"{}'.format(subreddit) for subreddit in subreddit_list]
-    print subreddit_keys[0]
-    for f in os.listdir(base_path_text):
-        if any(ext in f for ext in paths):
-            file_path = base_path_text + f
-            print file_path
-            with open(file_path, 'rb') as fop:
-                # because that's what this file and others had for output
-                csvreadr = csv.reader(fop, delimiter=',', quotechar='|')
-                csvreadr.next()
-                for line in csvreadr:
-                    comm = json.loads(line[0])
-                    if any (subreddit in comm["subreddit"] for subreddit in subreddit_list):
-                        #body = re.search('\"body\":\"(.+?)\"(,\")|(})', line).group(1)
-                        body = comm["body"] #these two options appear to the be the same speed.
-                        if body == "[deleted]" or body == "[removed]":
-                            continue
 
-                        subreddit = comm["subreddit"]
+    base_path_full = base_path + "non_top_level_comments/"
+    valid_file_paths = extract_pairs.list_file_appropriate_data_range(start_year,
+                                                        start_month, end_month,
+                                                        base_path_full)
 
-                        text_bodies[subreddit].append(body)
+    for file_path in valid_file_paths:
+        with open(file_path, 'rb') as fop:
+            # because that's what this file and others had for output
+            csvreadr = csv.reader(fop, delimiter=',', quotechar='|')
+            csvreadr.next()
+            for line in csvreadr:
+                comm = json.loads(line[0])
+                if any (subreddit in comm["subreddit"] for subreddit in subreddit_list):
+                    #body = re.search('\"body\":\"(.+?)\"(,\")|(})', line).group(1)
+                    body = comm["body"] #these two options appear to the be the same speed.
+                    if body == "[deleted]" or body == "[removed]":
+                        continue
+
+                    subreddit = comm["subreddit"]
+
+                    text_bodies[subreddit].append(body)
     return text_bodies
 
 

@@ -3,7 +3,6 @@
 Simple script written to accommodate multiprocessing. Given a file, extracts top level comments and immediate replies
 """
 import gzip
-import re
 import sys
 import csv
 import json
@@ -11,6 +10,12 @@ import os
 
 
 def extract_all_post_data_from_file(post_file_path, base_out_path="/home/ndg/projects/shared_datasets/reddit-style/"):
+    """
+    Given a post file, turn it into a csv file with columns ["post_id", "author", "karma", "subreddit"]
+    :param post_file_path:
+    :param base_out_path:
+    :return:
+    """
     file_name = post_file_path.split("/")[-1].replace(".gz", "")
 
     post_metadata_path = base_out_path + "post_metadata/" + file_name
@@ -34,6 +39,8 @@ def extract_all_post_data_from_file(post_file_path, base_out_path="/home/ndg/pro
 
             pm_writer.writerow([post_id, author, karma, subreddit])
 
+
+# TODO: leave in repeats??
 def extract_all_comment_data_from_file(comment_file_path, base_out_path="/home/ndg/projects/shared_datasets/reddit-style/"):
     """
     Iterates over the given file twice, the first time extracting all top-level comments
@@ -118,6 +125,39 @@ def extract_all_comment_data_from_file(comment_file_path, base_out_path="/home/n
                                 parent_author, karma, subreddit])
 
     fop.close()
+
+# TODO: you've restricted it to a day!!
+#TODO: CHECK HERE YOU HAVE THE COMPLETE DATE RANGE
+def list_file_appropriate_data_range(start_year, start_month, end_month, base_path_full, posts=False):
+    """
+    Get the processed files for the given date range
+    :param start_year:
+    :param start_month:
+    :param end_month:
+    :param base_path_full:
+    :param posts:
+    :return:
+    """
+    paths = []
+
+    if posts:
+        for month in range(start_month, end_month + 1):
+            month = '{:02d}'.format(month)
+            paths.append("RS_{}-{}".format(start_year, month))
+
+    else:
+        for month in range(start_month, end_month+1):
+            month = '{:02d}'.format(month)
+            paths.append("RC_{}-{}-01".format(start_year, month))
+
+    valid_file_paths = []
+    for f in os.listdir(base_path_full):
+        if any(ext in f for ext in paths):
+            file_path = base_path_full + f
+            valid_file_paths.append(file_path)
+
+    return valid_file_paths
+
 
 if __name__ == "__main__":
     file_path = sys.argv[1]
