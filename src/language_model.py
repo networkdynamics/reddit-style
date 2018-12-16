@@ -71,14 +71,16 @@ def load_language_model(subreddit, start_year, start_month, end_month, ngrams, t
     :param base_path: the project directory. always the same.
     :return:
     """
+    language_model_base_path  = base_path + "/language_models/"
+
     # TODO: make this global
     file_name = "{}_{}_{}_{}_{}_{}_{}.pkl".format(subreddit, start_year,
                                                   start_month, end_month,
                                                   ngrams, text_min, text_max)
-    file_path = base_path + file_name
+    file_path = language_model_base_path + file_name
     if not os.path.isfile(file_path):
         raise ValueError("the language model has not been created")
-    file_path = base_path + file_name
+    file_path = language_model_base_path + file_name
     lm = pickle.load(open(file_path, "rb"))
     return lm
 
@@ -97,11 +99,12 @@ def create_subreddit_language_models(subreddit_list, start_year, start_month, en
     :param base_path: the project directory. always the same.
     :return: None
     """
-
+    # TODO: should you be setting these in the function???
+    language_model_base_path  = base_path + "/language_models/"
     new_subreddit_list = []
     for subreddit in subreddit_list:
         file_name = "{}_{}_{}_{}_{}_{}_{}.pkl".format(subreddit, start_year, start_month, end_month, ngrams, text_min, text_max)
-        file_path = base_path + file_name
+        file_path = language_model_base_path + file_name
 
         if not os.path.isfile(file_path):
             print "looks like it doesn't exist, creating {} language model from scratch".format(subreddit)
@@ -113,7 +116,7 @@ def create_subreddit_language_models(subreddit_list, start_year, start_month, en
     for subreddit in new_subreddit_list:
         #bad to have this twice
         file_name = "{}_{}_{}_{}_{}_{}_{}.pkl".format(subreddit, start_year, start_month, end_month, ngrams, text_min, text_max)
-        file_path = base_path + file_name
+        file_path = language_model_base_path + file_name
 
         text_list = comment_list[subreddit]
         text = []
