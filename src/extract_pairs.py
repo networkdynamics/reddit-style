@@ -18,15 +18,19 @@ def extract_all_post_data_from_file(post_file_path, base_out_path="/home/ndg/pro
     with open(post_metadata_path, "wb") as pm:
         pm_writer = csv.writer(pm, delimiter=',',
                                quotechar='|', quoting=csv.QUOTE_MINIMAL)
-        pm_writer.writeheader(["post_id", "author", "karma", "subreddit"])
+        pm_writer.writerow(["post_id", "author", "karma", "subreddit"])
 
-        fop = gzip.open(post_file_path, 'rb')
+        print post_file_path
+        fop = open(post_file_path, 'rb')
         for line in fop:
             post = json.loads(line)
-            post_id = post["id"]
-            author = post["author"]
-            karma = post["score"]
-            subreddit = post["subreddit"]
+            try: #some posts seem to be weird ads without a subreddit field??
+                post_id = post["id"]
+                author = post["author"]
+                karma = post["score"]
+                subreddit = post["subreddit"]
+            except:
+                continue
 
             pm_writer.writerow([post_id, author, karma, subreddit])
 
@@ -74,7 +78,11 @@ def extract_all_comment_data_from_file(comment_file_path, base_out_path="/home/n
         comments_author = {}
         fop = gzip.open(comment_file_path, 'rb')
         for line in fop:
-            comm = json.loads(line)
+            try:
+                comm = json.loads(line)
+            except:
+                print comment_file_path, line
+                continue
             parent_id = comm["parent_id"]
             comm_id = comm["id"]
             author = comm["author"]

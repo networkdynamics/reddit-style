@@ -99,7 +99,7 @@ def create_query(author, time_period, subreddit):
 
     return query_dict
 
-
+#deprecated
 def get_prior_interactions(user1, user2, time_period=None, subreddit=None):
     """
     Get the number of times the given users have interacted. If given a time period and/or subreddit, restrict

@@ -16,13 +16,15 @@ import gzip
 import re
 from collections import defaultdict
 
-def get_relevant_text_bodies(subreddit_list, start_year, start_month, end_month):
+
+def get_relevant_text_bodies(subreddit_list, start_year, start_month, end_month, base_path):
     """
-    Currently slower than it needs to be. Finds the relevant text.
-    :param subreddit:
+    Given a list of subreddits, returns the appropriate text for those subreddits
+    :param subreddit_list:
     :param start_year:
     :param start_month:
     :param end_month:
+    :param base_path:
     :return:
     """
 
@@ -33,18 +35,19 @@ def get_relevant_text_bodies(subreddit_list, start_year, start_month, end_month)
     for month in range(start_month, end_month+1):
         month = '{:02d}'.format(month)
         paths.append("RC_{}-{}-12-01".format(start_year, month)) #TODO: you edited this
-    base_path = '/home/ndg/arc/reddit/{}/'.format(start_year)
+    base_path_text = base_path + "/non_top_level_comments"
     subreddit_keys = ['subreddit":"{}'.format(subreddit) for subreddit in subreddit_list]
 
-    for f in os.listdir(base_path):
+    for f in os.listdir(base_path_text):
         if any(ext in f for ext in paths):
-            file_path = base_path + f
+            file_path = base_path_text + f
             fop = gzip.open(file_path, 'rb')
             for line in fop:
                 if any(subreddit_key in line for subreddit_key in subreddit_keys):
                     #body = re.search('\"body\":\"(.+?)\"(,\")|(})', line).group(1)
                     comm = json.loads(line)
                     body = comm["body"] #these two options appear to the be the same speed.
+
                     if body == "[deleted]" or body == "[removed]":
                         continue
 
@@ -59,24 +62,46 @@ def get_relevant_text_bodies(subreddit_list, start_year, start_month, end_month)
     return text_bodies
 
 
-def load_language_model(subreddit, start_year, start_month, end_month, ngrams, text_min, text_max, base_path = "../data/subreddit_language_models/"):
-    #TODO fix with args and such
-    verify_subreddit_language_model([subreddit], start_year, start_month, end_month, ngrams, text_min, text_max, base_path = "../data/subreddit_language_models/" )
-    # TODO: this file name thing is dumb
-    file_name = "{}_{}_{}_{}_{}_{}_{}.pkl".format(subreddit, start_year, start_month, end_month, ngrams, text_min,
-                                                  text_max)
+def load_language_model(subreddit, start_year, start_month, end_month, ngrams, text_min, text_max, base_path):
+    """
+    Loads and returns the language model that
+    :param subreddit_list: list of subreddits
+    :param start_year: year
+    :param start_month: month
+    :param end_month: month
+    :param ngrams: the n of ngrams
+    :param text_min: minimum text length to warrant inclusion
+    :param text_max: maximum text length
+    :param base_path: the project directory. always the same.
+    :return:
+    """
+    # TODO: make this global
+    file_name = "{}_{}_{}_{}_{}_{}_{}.pkl".format(subreddit, start_year,
+                                                  start_month, end_month,
+                                                  ngrams, text_min, text_max)
+    file_path = base_path + file_name
+    if not os.path.isfile(file_path):
+        raise ValueError("the language model has not been created")
     file_path = base_path + file_name
     lm = pickle.load(open(file_path, "rb"))
     return lm
 
-def verify_subreddit_language_model(subreddit_list, start_year, start_month, end_month, ngrams, text_min, text_max, base_path = "../data/subreddit_language_models/"):
+def create_subreddit_language_models(subreddit_list, start_year, start_month, end_month, ngrams, text_min, text_max, base_path):
     """
-    Search to see if you have a cached language model. If so, load into memory and return.
-    If not, create the language model, cache it and return.
-    :param subreddit: the subreddit
-    :param date_range: the date range, as a datetime tuple (start, end)
+    Search to see if you have a cached language model for the params given.
+    If not, create it.
+
+    :param subreddit_list: list of subreddits
+    :param start_year: year
+    :param start_month: month
+    :param end_month: month
+    :param ngrams: the n of ngrams
+    :param text_min: minimum text length to warrant inclusion
+    :param text_max: maximum text length
+    :param base_path: the project directory. always the same.
     :return: None
     """
+
     new_subreddit_list = []
     for subreddit in subreddit_list:
         file_name = "{}_{}_{}_{}_{}_{}_{}.pkl".format(subreddit, start_year, start_month, end_month, ngrams, text_min, text_max)
@@ -85,8 +110,9 @@ def verify_subreddit_language_model(subreddit_list, start_year, start_month, end
         if not os.path.isfile(file_path):
             print "looks like it doesn't exist, creating {} language model from scratch".format(subreddit)
             new_subreddit_list.append(subreddit)
-
-    comment_list = get_relevant_text_bodies(new_subreddit_list, start_year, start_month, end_month)
+        else:
+            print "looks like {} language model already created".format(subreddit)
+    comment_list = get_relevant_text_bodies(new_subreddit_list, start_year, start_month, end_month, base_path)
 
     for subreddit in new_subreddit_list:
         #bad to have this twice
@@ -114,7 +140,7 @@ def verify_subreddit_language_model(subreddit_list, start_year, start_month, end
         lm = create_language_model_nltk_everygrams(all_sents, ngrams=2)
         pickle.dump(lm, open(file_path, "wb"), protocol=pickle.HIGHEST_PROTOCOL)
 
-
+# TODO: make this consistent over the whole project..?
 def preprocess_text(text_body, min_length, max_length):
     """
     Given a piece of text, lower it, remove punctuation and remove unicode
