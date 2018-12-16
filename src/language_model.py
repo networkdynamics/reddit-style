@@ -53,12 +53,8 @@ def get_relevant_text_bodies(subreddit_list, start_year, start_month, end_month,
 
                     subreddit = comm["subreddit"]
 
-                    # If it is a top level comment, len(tuple) will be 2:
-                    if comm["parent_id"].startswith('t3_'):
-                        text_bodies[subreddit].append((body, 'Top_Level_Comment'))
+                    text_bodies[subreddit].append(body)
 
-                    else: # len(tuple) would be 1
-                        text_bodies[subreddit].append((body,))
     return text_bodies
 
 
@@ -121,17 +117,7 @@ def create_subreddit_language_models(subreddit_list, start_year, start_month, en
 
         text_list = comment_list[subreddit]
         text = []
-        for tup in text_list:
-            # Skip top-level comments while training LM:
-            if len(tup) == 2:
-                continue
-            # Sanity check:
-            elif len(tup) != 1:
-                print "Not possible: ", tup
-                continue
-            else:
-                comm_text = tup[0]
-
+        for comm_text in text_list:
             res = preprocess_text(comm_text, text_max, text_min)
             if res:
                 text.append(res)
