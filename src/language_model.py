@@ -6,7 +6,7 @@ from nltk.lm.preprocessing import padded_everygram_pipeline
 from nltk.lm import KneserNeyInterpolated, WittenBellInterpolated
 from nltk.util import everygrams
 from nltk.lm.preprocessing import pad_both_ends
-from nltk.lm.preprocessing import flatten
+from nltk.lm.preprocessing import flatten, padded_everygrams
 from nltk.tokenize import sent_tokenize
 from nltk import word_tokenize
 import pickle
@@ -14,7 +14,10 @@ import os
 import json
 import csv
 import extract_pairs
-
+from nltk.util import bigrams, trigrams
+from nltk.lm import Vocabulary
+from nltk.lm.util import log_base2
+import numpy as np
 from collections import defaultdict
 
 
@@ -38,13 +41,18 @@ def get_relevant_text_bodies(subreddit_list, start_year, start_month, end_month,
                                                         start_month, end_month,
                                                         base_path_full)
 
+    print valid_file_paths
     for file_path in valid_file_paths:
         with open(file_path, 'rb') as fop:
             # because that's what this file and others had for output
             csvreadr = csv.reader(fop, delimiter=',', quotechar='|')
             csvreadr.next()
             for line in csvreadr:
-                comm = json.loads(line[0])
+                try:
+                    comm = json.loads(line[0])
+                except ValueError:
+                    print "BADLY FORMATTED", line
+                    continue
                 if any (subreddit in comm["subreddit"] for subreddit in subreddit_list):
                     #body = re.search('\"body\":\"(.+?)\"(,\")|(})', line).group(1)
                     body = comm["body"] #these two options appear to the be the same speed.
@@ -132,7 +140,8 @@ def create_subreddit_language_models(subreddit_list, start_year, start_month, en
         file_name = "{}_{}_{}_{}_{}_{}_{}.pkl".format(subreddit, start_year, start_month, end_month, ngrams, text_min, text_max)
         file_path = language_model_base_path + file_name
         all_sents = [item for sublist in text for item in sublist]
-        lm = create_language_model_nltk_everygrams(all_sents, ngrams=2)
+        print len(all_sents), "LENGTH ALL SENTS"
+        lm = create_language_model_nltk_everygrams(all_sents, ngrams=ngrams)
         pickle.dump(lm, open(file_path, "wb"), protocol=pickle.HIGHEST_PROTOCOL)
 
 # TODO: make this consistent over the whole project..?
@@ -167,9 +176,14 @@ def create_language_model_nltk_everygrams(text, ngrams=2):
     # see http://www.nltk.org/api/nltk.lm.html#module-nltk.lm.models
     train, vocab = padded_everygram_pipeline(ngrams, text)
     lm = WittenBellInterpolated(ngrams)
+    # can't use vocab twice because generator, but
     lm.fit(train, vocab)
-    print lm.generate(1, random_seed=3)
     return lm
+
+def entropy(scores):
+    sum = np.ma.masked_invalid(scores).sum()
+    length = len(scores)
+    return -1 * (sum/length)
 
 # TODO: is inverse of entropy a thing??
 def text_similarity_nltk_everygrams(texts, lm, ngrams, text_min, text_max):
@@ -179,15 +193,13 @@ def text_similarity_nltk_everygrams(texts, lm, ngrams, text_min, text_max):
     :param lm: the language model
     :return: a list of inverse entropys for each text
     """
-    print lm.generate(6, random_seed=2)
     res = []
     for text in texts:
         text = preprocess_text(text, text_min, text_max)
-        print text
-        train, _ = padded_everygram_pipeline(ngrams, text)
-        test = [('and'), ('when')]
-        res.append(lm.entropy(
-            test
-        ))
+        bgrms = flatten([padded_everygrams(ngrams, sent) for sent in text])
+        # warning, when you've used this chain thing you can't use it twice
+        # it's a generator!
+
+        res.append(entropy([log_base2(lm.score(n[-1], n[:-1])) for n in bgrms]))
 
     return res

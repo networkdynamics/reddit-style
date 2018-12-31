@@ -148,7 +148,7 @@ def list_file_appropriate_data_range(start_year, start_month, end_month, base_pa
     else:
         for month in range(start_month, end_month+1):
             month = '{:02d}'.format(month)
-            paths.append("RC_{}-{}-01".format(start_year, month))
+            paths.append("RC_{}-{}".format(start_year, month))
 
     valid_file_paths = []
     for f in os.listdir(base_path_full):
