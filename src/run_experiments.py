@@ -114,6 +114,11 @@ def get_all_values_jan_4():
 
     out_file = "/home/ndg/projects/shared_datasets/reddit-style/data/get_all_values_jan_4.csv"
 
+    get_features.write_to_csv(subreddits, year, start_month, end_month, ngrams, text_min,
+                              text_max, base_path, relevant_categories, out_file,
+                              user_prolificness_subreddit, user_karma_subreddit,
+                              prior_interaction_subreddit)
+
 
 if __name__ == "__main__":
     test_create_language_model_new_scheme()
