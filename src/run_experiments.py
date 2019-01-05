@@ -5,6 +5,7 @@ Describes everything that is done to process data. No modifications should be ma
 import os
 import language_model
 import get_features
+import csv
 
 #THE FUNCTION HAS SINCE BEEN CHANGED
 def get_2015_pairs_duplicates_included():
@@ -85,6 +86,81 @@ def test_load_dataframe():
     print karma, "KARMA"
     prolif = get_features.get_user_prolificness("aresef", comment_df, post_df)
     print prolif, "PROLIF"
+
+
+# TODO: need to decide on all features from LIWC 2015
+# TODO: need to make a file name creation function
+def get_all_values_jan_4():
+    """This function is not further modularized so that all parameters
+    can be simply and explicitly listed without having to pass them repeatedly.
+    It also explicityly defines the flow and methods used."""
+    subreddits = ["mcgill"]
+
+    year = 2016
+    start_month = 1
+    end_month = 2
+
+    ngrams = 4
+    text_min = 10
+    text_max = 1000
+
+    relevant_categories = [] # TODO: fill this out
+    base_path = "/home/ndg/projects/shared_datasets/reddit-style/"
+
+    out_file = "/home/ndg/projects/shared_datasets/reddit-style/data/get_all_values_jan_4.csv"
+
+    comment_df = get_features.load_dataframe(year, start_month, end_month,
+                                             base_path)
+    post_df = get_features.load_dataframe(year, start_month, end_month,
+                                          base_path, contribtype="post")
+
+    pairs = get_features.load_pairs(base_path, year, start_month, end_month,
+                                    subreddits)
+
+    base_path = "/home/ndg/projects/shared_datasets/reddit-style/"
+    language_model.create_subreddit_language_models(subreddits, year,
+                                                    start_month, end_month,
+                                                    ngrams, text_min, text_max,
+                                                    base_path)
+    with open(out_file, "wb") as csvfile:
+        cwriter = csv.writer(csvfile)
+
+        for subreddit in subreddits:
+
+            lm = language_model.load_language_model(subreddit, year,
+                                                        start_month, end_month,
+                                                        ngrams, text_min, text_max,
+                                                        base_path)
+
+            comment_pairs = pairs[subreddit]
+
+
+            #for every pair, get the appropriate values and write them out.
+            #let's make an ordered list.
+            # need to make sure every function returns None as appropriate
+            # this is a list of tuples
+
+            pairs_entropy_values = get_features.get_language_model_match(comment_pairs, lm)
+
+
+            #pairs category counts
+
+            pairs_category_counts = get_features.get_category_counts(
+                comment_pairs, relevant_categories)
+
+
+            #prior interactions
+
+            #user prolificness
+
+            #user karma
+
+
+
+
+
+
+
 
 if __name__ == "__main__":
     test_create_language_model_new_scheme()

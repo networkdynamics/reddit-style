@@ -12,6 +12,8 @@ import datetime
 import pandas as pd
 import numpy as np
 import extract_pairs
+import get_token_categories
+from collections import Counter, defaultdict
 
 def start_server():
     """
@@ -87,6 +89,7 @@ def load_dataframe(year, start_month, end_month, base_path, contribtype="comment
         [pd.read_csv(f, sep=',', index_col=0, header=0,
                      dtype={"karma":np.int32}) for f in valid_file_paths])
 
+    big_frame = clean_dataframe(big_frame)
     return big_frame
 
 def clean_dataframe(df):
@@ -101,6 +104,38 @@ def clean_dataframe(df):
 
     return df
 
+def get_category_counts(pairs, relevant_categories):
+    """
+    Gets the relevant category counts for the given texts. Is reasonably efficient.
+    :param texts: the texts we want to get category counts for
+    :param relevant_categories: list of all the categories we care about
+    :return: a list of 2 item lists of dictionaries, in the same order as the input texts,
+    where the dictionaries contain the counts of each of the relevant categories
+    """
+    # TODO: deal with lemmatization??
+    parse, category_names = get_token_categories.load_token_parser("../data/categories.dic")
+
+    all_text_counts = []
+    for pair in pairs:
+
+        text1 = pair[0]["body"]
+        text2 = pair[1]["body"]
+
+        pair_category_counts = []
+
+        for text in [text1, text2]:
+            sents = language_model.preprocess_text(text, 0, 1000)
+            tokens = [item for sublist in sents for item in sublist]
+            counts = Counter(category for token in tokens for category in
+                parse(token))
+            category_counts = {cat: counts[cat] for cat in
+                               relevant_categories}
+
+            pair_category_counts.append(category_counts)
+
+        all_text_counts.append(pair_category_counts)
+
+    return all_text_counts
 
 # TODO: refactor below to use apply ??
 # TODO: include replies to top-level posts?
@@ -124,7 +159,6 @@ def get_user_interactions(user1, user2, df, subreddit=None):
                ((df['author'] == user2) & (df['parent_author'] == user1) & (df['subreddit'] == subreddit))]
 
     return res.shape[0]
-
 
 def get_user_prolificness(user, comment_df, post_df, subreddit=None):
     """
@@ -167,25 +201,36 @@ def get_user_karma(user, comment_df, post_df, subreddit=None):
 
     return comment_karma, post_karma
 
-
-def load_pairs(file_path):
+# TODO: test this.
+def load_pairs(base_path, year, start_month, end_month, subreddits):
     """
     Loads the parent child pairs found in the given file
     :param file_path:
     :return: The pairs organized by subreddit
     """
+
+    base_path_full = base_path + "non_top_level_comments/"
+    valid_file_paths = extract_pairs.list_file_appropriate_data_range(year,
+                                                        start_month, end_month,
+                                                        base_path_full)
+
     pairs = defaultdict(lambda: [])
-    with open(file_path, "rb") as f:
-        for line in f:
-            line = line.split("} {") #TODO: fix. saved file wrong
-            parent = json.loads(line[0]+ "}")
-            child = json.loads("{" + line[1])
 
-            subreddit = parent["subreddit"]
+    for file_path in valid_file_paths:
+        with open(file_path, "rb") as f:
+            for line in f:
+                line = line.split("} {") #TODO: fix. saved file wrong
+                parent = json.loads(line[0]+ "}")
+                child = json.loads("{" + line[1])
 
-            pairs[subreddit].append((parent, child))
+                subreddit = parent["subreddit"]
+                if subreddit not in subreddits:
+                    continue
+
+                pairs[subreddit].append((parent, child))
 
     return pairs
+
 
 
 def get_language_model_match(pairs_list, lm):
@@ -197,7 +242,7 @@ def get_language_model_match(pairs_list, lm):
 
     all_text = []
     for pair in pairs_list:
-        p = pair[0]
+        p = pair[0] # TODO: why aren't we doing this for both??
         all_text.append(p["body"])
 
     res = language_model.text_similarity_nltk_everygrams(all_text, lm)
@@ -257,3 +302,4 @@ def get_prior_interactions(user1, user2, time_period=None, subreddit=None):
                 if comm["author"] in user_list[i_r]:
                     prior_interactions += 1
     return prior_interactions
+

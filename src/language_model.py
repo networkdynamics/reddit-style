@@ -175,8 +175,9 @@ def create_language_model_nltk_everygrams(text, ngrams=2):
     """
     # see http://www.nltk.org/api/nltk.lm.html#module-nltk.lm.models
     train, vocab = padded_everygram_pipeline(ngrams, text)
-    lm = WittenBellInterpolated(ngrams)
+    lm = KneserNeyInterpolated(ngrams) # TODO: set backoff?
     # can't use vocab twice because generator, but
+    # TODO: set the vocab unknown token #
     lm.fit(train, vocab)
     return lm
 
@@ -191,7 +192,7 @@ def text_similarity_nltk_everygrams(texts, lm, ngrams, text_min, text_max):
     Given a list of texts return a list of their inverse entropy
     :param texts: a list of strings, preprocessed as they were for the language model
     :param lm: the language model
-    :return: a list of inverse entropys for each text
+    :return: a list of  entropys for each text
     """
     res = []
     for text in texts:
@@ -199,7 +200,9 @@ def text_similarity_nltk_everygrams(texts, lm, ngrams, text_min, text_max):
         bgrms = flatten([padded_everygrams(ngrams, sent) for sent in text])
         # warning, when you've used this chain thing you can't use it twice
         # it's a generator!
-
-        res.append(entropy([log_base2(lm.score(n[-1], n[:-1])) for n in bgrms]))
-
+        try:
+            res.append(entropy([log_base2(lm.score(n[-1], n[:-1])) for n in bgrms]))
+        except ZeroDivisionError:
+            print "skipped"
+            res.append(None)
     return res

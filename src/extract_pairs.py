@@ -41,6 +41,7 @@ def extract_all_post_data_from_file(post_file_path, base_out_path="/home/ndg/pro
 
 
 # TODO: leave in repeats??
+# TODO: really need to sanity check this
 def extract_all_comment_data_from_file(comment_file_path, base_out_path="/home/ndg/projects/shared_datasets/reddit-style/"):
     """
     Iterates over the given file twice, the first time extracting all top-level comments
@@ -126,8 +127,6 @@ def extract_all_comment_data_from_file(comment_file_path, base_out_path="/home/n
 
     fop.close()
 
-# TODO: you've restricted it to a day!!
-#TODO: CHECK HERE YOU HAVE THE COMPLETE DATE RANGE
 def list_file_appropriate_data_range(start_year, start_month, end_month, base_path_full, posts=False):
     """
     Get the processed files for the given date range
