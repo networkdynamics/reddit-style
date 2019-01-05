@@ -482,10 +482,11 @@ def write_to_csv(subreddits, year, start_month, end_month, ngrams, text_min,
                           pairs_user_prolificness[i][0],
                           pairs_user_prolificness[i][1],
                           pairs_user_karma[i][0],
-                          pairs_user_karma[i][0],
+                          pairs_user_karma[i][1],
                           pairs_prior_interactions[i]
                           ]
 
                 values = values + category_values
 
                 cwriter.write([values])
+
