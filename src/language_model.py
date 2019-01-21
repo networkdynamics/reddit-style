@@ -8,7 +8,7 @@ from nltk.util import everygrams
 from nltk.lm.preprocessing import pad_both_ends
 from nltk.lm.preprocessing import flatten, padded_everygrams
 from nltk.tokenize import sent_tokenize
-from nltk import word_tokenize
+from nltk import word_tokenize, sent_tokenize
 import pickle
 import os
 import json
@@ -19,7 +19,8 @@ from nltk.lm import Vocabulary
 from nltk.lm.util import log_base2
 import numpy as np
 from collections import defaultdict
-
+import kenlm
+import subprocess
 
 def get_relevant_text_bodies(subreddit_list, start_year, start_month, end_month, base_path):
     """
@@ -81,7 +82,7 @@ def load_language_model(subreddit, start_year, start_month, end_month, ngrams, t
     language_model_base_path  = base_path + "language_models/"
 
     # TODO: make this global
-    file_name = "{}_{}_{}_{}_{}_{}_{}.pkl".format(subreddit, start_year,
+    file_name = "{}_{}_{}_{}_{}_{}_{}.klm".format(subreddit, start_year,
                                                   start_month, end_month,
                                                   ngrams, text_min, text_max)
     file_path = language_model_base_path + file_name
@@ -90,8 +91,8 @@ def load_language_model(subreddit, start_year, start_month, end_month, ngrams, t
     if not os.path.isfile(file_path):
         raise ValueError("the language model has not been created")
     file_path = language_model_base_path + file_name
-    lm = pickle.load(open(file_path, "rb"))
-    return lm
+    model = kenlm.LanguageModel('bible.klm')
+    return model
 
 def create_subreddit_language_models(subreddit_list, start_year, start_month, end_month, ngrams, text_min, text_max, base_path):
     """
@@ -113,7 +114,7 @@ def create_subreddit_language_models(subreddit_list, start_year, start_month, en
 
     new_subreddit_list = []
     for subreddit in subreddit_list:
-        file_name = "{}_{}_{}_{}_{}_{}_{}.pkl".format(subreddit, start_year, start_month, end_month, ngrams, text_min, text_max)
+        file_name = "{}_{}_{}_{}_{}_{}_{}.arpa".format(subreddit, start_year, start_month, end_month, ngrams, text_min, text_max)
         file_path = language_model_base_path + file_name
         if not os.path.isfile(file_path):
             print "looks like it doesn't exist, creating {} language model from scratch".format(subreddit)
@@ -134,15 +135,16 @@ def create_subreddit_language_models(subreddit_list, start_year, start_month, en
         for comm_text in text_list:
             res = preprocess_text(comm_text, text_min, text_max)
             if res:
-                text.append(res)
+                text.extend(res)
 
-        #bad to have this twice
-        file_name = "{}_{}_{}_{}_{}_{}_{}.pkl".format(subreddit, start_year, start_month, end_month, ngrams, text_min, text_max)
+        joined_text = "\n".join(text)
+        file_name = "{}_{}_{}_{}_{}_{}_{}.arpa".format(subreddit, start_year,
+                                                      start_month, end_month,
+                                                      ngrams, text_min,
+                                                      text_max)
         file_path = language_model_base_path + file_name
-        all_sents = [item for sublist in text for item in sublist]
-        print len(all_sents), "LENGTH ALL SENTS"
-        lm = create_language_model_nltk_everygrams(all_sents, ngrams=ngrams)
-        pickle.dump(lm, open(file_path, "wb"), protocol=pickle.HIGHEST_PROTOCOL)
+
+        create_language_model(joined_text, file_path, ngrams=ngrams)
 
 # TODO: make this consistent over the whole project..?
 def preprocess_text(text_body, min_length, max_length):
@@ -160,31 +162,16 @@ def preprocess_text(text_body, min_length, max_length):
     text_body = text_body.strip(whitespace).lower().encode('ascii', 'ignore') #fix this
     if len(text_body) > max_length:
         text_body = text_body[:max_length]
-    text = sent_tokenize(text_body) #now split into sentences
-    sents = [word_tokenize(sent) for sent in text] #now tokenize those sentences
+    sents = [' '.join(word_tokenize(sent)) for sent in sent_tokenize(text_body)] #now tokenize those sentences
     return sents
 
 
-def create_language_model_nltk_everygrams(text, ngrams=2):
-    """
-    A first attempt at creating a language model.
-    Likely very memory heavy and inefficient.
-    :param subreddit:
-    :param time_period:
-    :return:
-    """
-    # see http://www.nltk.org/api/nltk.lm.html#module-nltk.lm.models
-    train, vocab = padded_everygram_pipeline(ngrams, text)
-    lm = KneserNeyInterpolated(ngrams) # TODO: set backoff?
-    # can't use vocab twice because generator, but
-    # TODO: set the vocab unknown token #
-    lm.fit(train, vocab)
-    return lm
+def create_language_model(joined_text, file_path, ngrams=3):
+    subprocess.call('echo {} | ~/kenlm/bin/lmplz -o {} > {}'.format(joined_text, ngrams, file_path), shell=True)
 
-def entropy(scores):
-    sum = np.ma.masked_invalid(scores).sum()
-    length = len(scores)
-    return -1 * (sum/length)
+    file_path_binary = file_path[:-4]+"klm"
+    subprocess.call("./kenlm/bin/build_binary {} {}".format(file_path, file_path_binary))
+
 
 # TODO: is inverse of entropy a thing??
 def text_similarity_nltk_everygrams(texts, lm, ngrams, text_min, text_max):
@@ -197,12 +184,6 @@ def text_similarity_nltk_everygrams(texts, lm, ngrams, text_min, text_max):
     res = []
     for text in texts:
         text = preprocess_text(text, text_min, text_max)
-        bgrms = flatten([padded_everygrams(ngrams, sent) for sent in text])
-        # warning, when you've used this chain thing you can't use it twice
-        # it's a generator!
-        try:
-            res.append(entropy([log_base2(lm.score(n[-1], n[:-1])) for n in bgrms]))
-        except ZeroDivisionError:
-            print "skipped"
-            res.append(None)
-    return res
+        text_scores = []
+        for sent in text:
+            text_scores.append(lm.score(sent)) #TODO YOU ARE HERE.
