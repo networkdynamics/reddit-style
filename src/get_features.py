@@ -383,11 +383,30 @@ def get_prior_interactions(user1, user2, time_period=None, subreddit=None):
     return prior_interactions
 
 
+# TODO: modularize writing to csv so that you can ensure consistentcy
 
 def write_to_csv(subreddits, year, start_month, end_month, ngrams, text_min,
                  text_max, base_path, relevant_categories, out_file,
                  user_prolificness_subreddit, user_karma_subreddit,
                  prior_interaction_subreddit):
+    """
+    Defines how the various value functions are called and how they are written to csv
+    to ensure consistentcy
+    :param subreddits:
+    :param year:
+    :param start_month:
+    :param end_month:
+    :param ngrams:
+    :param text_min:
+    :param text_max:
+    :param base_path:
+    :param relevant_categories:
+    :param out_file:
+    :param user_prolificness_subreddit:
+    :param user_karma_subreddit:
+    :param prior_interaction_subreddit:
+    :return:
+    """
 
     comment_df = load_dataframe(year, start_month, end_month,
                                              base_path)
@@ -490,3 +509,14 @@ def write_to_csv(subreddits, year, start_month, end_month, ngrams, text_min,
 
                 cwriter.write([values])
 
+
+### ok so what do you want the binning functions to look like?
+
+## well you want to bin 2d and linearlize? do you do that for all the values?
+
+## mmmm I bet you can deal with all this using fucking pandas
+
+# yeah I think it's better to leave an lookup on how to bin using pandas.
+# may as well do it dynamically and generate heatmaps right from that
+# you can probably also load just some subreddits in pandas.
+# or chop the csv
