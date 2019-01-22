@@ -120,11 +120,15 @@ def get_all_values_jan_4():
                               prior_interaction_subreddit)
 
 def test_create_language_model_kenlm():
+
+
+
+
     subreddits = ["mcgill"]
     year = 2016
     start_month = 1
     end_month = 1
-    ngrams = 4
+    ngrams = 5
     text_min = 10
     text_max = 1000
     base_path = "/home/ndg/projects/shared_datasets/reddit-style/"
@@ -142,5 +146,64 @@ def test_create_language_model_kenlm():
     texts = ["what is life", "As if anyone claimed it would end the occupation. It was always intended as a symbolic gesture: to not stand in support of oppression.", "this is me at a bank"]
     res = language_model.text_scores(texts, lm, ngrams, text_min, text_max)
     print res
+
+
+def create_many_language_models():
+
+    with open("../data/cohesion_subs.txt") as f:
+        content = f.readlines()
+    content = [x.strip() for x in content]
+
+    subreddits = content
+    year = 2016
+    start_month = 1
+    end_month = 1
+    ngrams = 5
+    text_min = 5
+    text_max = 10000
+    base_path = "/home/ndg/projects/shared_datasets/reddit-style/"
+    language_model.create_subreddit_language_models(subreddits, year,
+                                                    start_month, end_month,
+                                                    ngrams, text_min, text_max,
+                                                    base_path)
+
+# TODO: need to decide on all features from LIWC 2015
+# TODO: need to make a file name creation function
+def get_all_values_jan_22():
+    """Defines all parameters for the entire experiment"""
+    with open("../data/cohesion_subs.txt") as f:
+        content = f.readlines()
+    content = [x.strip() for x in content]
+
+    subreddits = content[:2]
+
+    year = 2016
+    start_month = 1
+    end_month = 1
+
+    ngrams = 5
+    text_min = 5 # TODO: make sure this is being used in all the right places
+    text_max = 10000
+
+    # TODO: are these truly the values that you want?
+    # values that define if you restrict value calculation to just a certain
+    # subreddit
+    prior_interaction_subreddit = None
+    user_prolificness_subreddit = None
+    user_karma_subreddit = None
+
+    relevant_categories = ["ppron", "i", "we", "you", "shehe", "they" "ipron",
+                           "article", "prep", "auxverb",
+                           "conj", "negate", "verb", "adj", "compare",
+                           "interrog", "number", "quant", "posemo", "negemo",
+                           "anx", "anger", "sad"]
+    base_path = "/home/ndg/projects/shared_datasets/reddit-style/"
+
+    out_file = "/home/ndg/projects/shared_datasets/reddit-style/output_data/short_get_all_values_jan_22.csv"
+
+    get_features.write_to_csv(subreddits, year, start_month, end_month, ngrams, text_min,
+                              text_max, base_path, relevant_categories, out_file,
+                              user_prolificness_subreddit, user_karma_subreddit,
+                              prior_interaction_subreddit)
 if __name__ == "__main__":
-    test_create_language_model_kenlm()
+    get_all_values_jan_22()

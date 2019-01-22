@@ -173,7 +173,7 @@ def create_language_model(joined_text, file_path, ngrams=3):
         text_file.write(joined_text)
 
     print len(joined_text)
-    subprocess.call('cat temp.txt | ~/kenlm/build/bin/lmplz --skip_symbols --discount_fallback -o {} -S 1G -T /tmp  > {}'.format(ngrams, file_path), shell=True)
+    subprocess.call('cat temp.txt | ~/kenlm/build/bin/lmplz --skip_symbols --discount_fallback -o {} -S 5G -T /tmp  > {}'.format(ngrams, file_path), shell=True)
 
     file_path_binary = file_path[:-4]+"klm"
     subprocess.call("~/kenlm/build/bin/build_binary {} {}".format(file_path, file_path_binary), shell=True)

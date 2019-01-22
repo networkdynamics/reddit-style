@@ -81,8 +81,6 @@ def load_dataframe(year, start_month, end_month, base_path, contribtype="comment
     else:
         raise ValueError("Not a valid contribtype")
 
-    print valid_file_paths
-
     if not valid_file_paths:
         raise ValueError("You haven't processed date ranges yet")
 
@@ -251,7 +249,7 @@ def get_pairs_user_karma(pairs, comment_df, post_df, subreddit):
 
         pair_karma = []
         for user in [user1, user2]:
-            res = get_user_prolificness(user, comment_df, post_df, subreddit)
+            res = get_user_karma(user, comment_df, post_df, subreddit)
 
             pair_karma.append(res)
 
@@ -288,7 +286,7 @@ def load_pairs(base_path, year, start_month, end_month, subreddits):
     :return: The pairs organized by subreddit
     """
 
-    base_path_full = base_path + "non_top_level_comments/"
+    base_path_full = base_path + "top_level_comments/"
     valid_file_paths = extract_pairs.list_file_appropriate_data_range(year,
                                                         start_month, end_month,
                                                         base_path_full)
@@ -297,10 +295,12 @@ def load_pairs(base_path, year, start_month, end_month, subreddits):
 
     for file_path in valid_file_paths:
         with open(file_path, "rb") as f:
-            for line in f:
-                line = line.split("} {") #TODO: fix. saved file wrong
-                parent = json.loads(line[0]+ "}")
-                child = json.loads("{" + line[1])
+            ntlp_reader = csv.reader(f, delimiter=',',
+                                   quotechar='|', quoting=csv.QUOTE_MINIMAL)
+            ntlp_reader.next()
+            for line in ntlp_reader:
+                parent = json.loads(line[0])
+                child = json.loads(line[1])
 
                 subreddit = parent["subreddit"]
                 if subreddit not in subreddits:
@@ -312,7 +312,7 @@ def load_pairs(base_path, year, start_month, end_month, subreddits):
 
 
 
-def get_language_model_match(pairs_list, lm):
+def get_language_model_match(pairs_list, lm, ngrams, text_min, text_max):
     """
     Given a list of pairs, get the language model similarity score for the parent in the pair. Parent always comes first.
     :param pairs_list: List of tuples of json objects
@@ -321,12 +321,19 @@ def get_language_model_match(pairs_list, lm):
 
     all_text = []
     for pair in pairs_list:
-        p = pair[0] # TODO: why aren't we doing this for both??
+        p = pair[0]
         all_text.append(p["body"])
 
-    res = language_model.text_similarity_nltk_everygrams(all_text, lm)
+    res_parent = language_model.text_scores(all_text, lm, ngrams, text_min, text_max)
 
-    return res
+    all_text = []
+    for pair in pairs_list:
+        p = pair[1]
+        all_text.append(p["body"])
+
+    res_child = language_model.text_scores(all_text, lm, ngrams, text_min, text_max)
+
+    return zip(res_parent, res_child)
 
 def create_query(author, time_period, subreddit):
     """
@@ -416,6 +423,7 @@ def write_to_csv(subreddits, year, start_month, end_month, ngrams, text_min,
     pairs = load_pairs(base_path, year, start_month, end_month,
                                     subreddits)
 
+    print "loaded dataframes and pairs"
 
     language_model.create_subreddit_language_models(subreddits, year,
                                                     start_month, end_month,
@@ -448,9 +456,11 @@ def write_to_csv(subreddits, year, start_month, end_month, ngrams, text_min,
 
         cwriter = csv.writer(csvfile)
 
-        cwriter.write(csv_header_values)
+        cwriter.writerow(csv_header_values)
 
         for subreddit in subreddits:
+
+            print "processing {} now".format(subreddit)
 
             lm = language_model.load_language_model(subreddit, year,
                                                     start_month, end_month,
@@ -459,9 +469,10 @@ def write_to_csv(subreddits, year, start_month, end_month, ngrams, text_min,
 
             subreddit_pairs = pairs[subreddit]
 
+
             # next 3 below values are a list of tuples
 
-            pairs_entropy_values = get_language_model_match(subreddit_pairs, lm)
+            pairs_entropy_values = get_language_model_match(subreddit_pairs, lm, ngrams, text_min, text_max)
 
             pairs_user_prolificness = get_pairs_user_prolificness(
                 subreddit_pairs, comment_df, post_df,
@@ -507,7 +518,7 @@ def write_to_csv(subreddits, year, start_month, end_month, ngrams, text_min,
 
                 values = values + category_values
 
-                cwriter.write([values])
+                cwriter.writerow(values)
 
 
 ### ok so what do you want the binning functions to look like?
