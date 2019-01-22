@@ -175,7 +175,7 @@ def get_all_values_jan_22():
         content = f.readlines()
     content = [x.strip() for x in content]
 
-    subreddits = content[:2]
+    subreddits = content
 
     year = 2016
     start_month = 1
@@ -199,7 +199,7 @@ def get_all_values_jan_22():
                            "anx", "anger", "sad"]
     base_path = "/home/ndg/projects/shared_datasets/reddit-style/"
 
-    out_file = "/home/ndg/projects/shared_datasets/reddit-style/output_data/short_get_all_values_jan_22.csv"
+    out_file = "/home/ndg/projects/shared_datasets/reddit-style/output_data/cohesion_subs_get_all_values_jan_22_{}_{}_{}_{}_{}_{}.csv".format(year, start_month, end_month, ngrams, text_min, text_max)
 
     get_features.write_to_csv(subreddits, year, start_month, end_month, ngrams, text_min,
                               text_max, base_path, relevant_categories, out_file,
