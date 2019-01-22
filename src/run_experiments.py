@@ -48,8 +48,8 @@ def test_create_language_model_new_scheme():
     start_month = 1
     end_month = 1
     ngrams = 4
-    text_min = 10
-    text_max = 1000
+    text_min = 0
+    text_max = 100000
     base_path = "/home/ndg/projects/shared_datasets/reddit-style/"
     language_model.create_subreddit_language_models(subreddits, year,
                                                     start_month, end_month,
@@ -119,6 +119,28 @@ def get_all_values_jan_4():
                               user_prolificness_subreddit, user_karma_subreddit,
                               prior_interaction_subreddit)
 
+def test_create_language_model_kenlm():
+    subreddits = ["mcgill"]
+    year = 2016
+    start_month = 1
+    end_month = 1
+    ngrams = 4
+    text_min = 10
+    text_max = 1000
+    base_path = "/home/ndg/projects/shared_datasets/reddit-style/"
+    language_model.create_subreddit_language_models(subreddits, year,
+                                                    start_month, end_month,
+                                                    ngrams, text_min, text_max,
+                                                    base_path)
 
+    lm = language_model.load_language_model(subreddits[0], year,
+                                                    start_month, end_month,
+                                                    ngrams, text_min, text_max,
+                                                    base_path)
+
+
+    texts = ["what is life", "As if anyone claimed it would end the occupation. It was always intended as a symbolic gesture: to not stand in support of oppression.", "this is me at a bank"]
+    res = language_model.text_scores(texts, lm, ngrams, text_min, text_max)
+    print res
 if __name__ == "__main__":
-    test_create_language_model_new_scheme()
+    test_create_language_model_kenlm()

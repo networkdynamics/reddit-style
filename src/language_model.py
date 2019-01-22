@@ -21,7 +21,7 @@ import numpy as np
 from collections import defaultdict
 import kenlm
 import subprocess
-
+import re
 def get_relevant_text_bodies(subreddit_list, start_year, start_month, end_month, base_path):
     """
     Given a list of subreddits, returns the appropriate text for those subreddits
@@ -42,7 +42,6 @@ def get_relevant_text_bodies(subreddit_list, start_year, start_month, end_month,
                                                         start_month, end_month,
                                                         base_path_full)
 
-    print valid_file_paths
     for file_path in valid_file_paths:
         with open(file_path, 'rb') as fop:
             # because that's what this file and others had for output
@@ -91,7 +90,7 @@ def load_language_model(subreddit, start_year, start_month, end_month, ngrams, t
     if not os.path.isfile(file_path):
         raise ValueError("the language model has not been created")
     file_path = language_model_base_path + file_name
-    model = kenlm.LanguageModel('bible.klm')
+    model = kenlm.LanguageModel(file_path)
     return model
 
 def create_subreddit_language_models(subreddit_list, start_year, start_month, end_month, ngrams, text_min, text_max, base_path):
@@ -160,6 +159,7 @@ def preprocess_text(text_body, min_length, max_length):
     #print text_body
     whitespace = "\r\n\t"
     text_body = text_body.strip(whitespace).lower().encode('ascii', 'ignore') #fix this
+    text_body = re.sub(r'[^a-zA-Z0-9.,\s]', '', text_body)
     if len(text_body) > max_length:
         text_body = text_body[:max_length]
     sents = [' '.join(word_tokenize(sent)) for sent in sent_tokenize(text_body)] #now tokenize those sentences
@@ -167,14 +167,20 @@ def preprocess_text(text_body, min_length, max_length):
 
 
 def create_language_model(joined_text, file_path, ngrams=3):
-    subprocess.call('echo {} | ~/kenlm/bin/lmplz -o {} > {}'.format(joined_text, ngrams, file_path), shell=True)
+    #subprocess.call('echo {} | ~/kenlm/bin/lmplz -o {} > {}'.format(joined_text, ngrams, file_path), shell=True)
+
+    with open("temp.txt", "w") as text_file:
+        text_file.write(joined_text)
+
+    print len(joined_text)
+    subprocess.call('cat temp.txt | ~/kenlm/build/bin/lmplz --skip_symbols --discount_fallback -o {} -S 1G -T /tmp  > {}'.format(ngrams, file_path), shell=True)
 
     file_path_binary = file_path[:-4]+"klm"
-    subprocess.call("./kenlm/bin/build_binary {} {}".format(file_path, file_path_binary))
+    subprocess.call("~/kenlm/build/bin/build_binary {} {}".format(file_path, file_path_binary), shell=True)
 
 
 # TODO: is inverse of entropy a thing??
-def text_similarity_nltk_everygrams(texts, lm, ngrams, text_min, text_max):
+def text_scores(texts, lm, ngrams, text_min, text_max):
     """
     Given a list of texts return a list of their inverse entropy
     :param texts: a list of strings, preprocessed as they were for the language model
@@ -186,4 +192,7 @@ def text_similarity_nltk_everygrams(texts, lm, ngrams, text_min, text_max):
         text = preprocess_text(text, text_min, text_max)
         text_scores = []
         for sent in text:
-            text_scores.append(lm.score(sent)) #TODO YOU ARE HERE.
+            text_scores.append(lm.score(sent))
+        res.append(np.mean(text_scores)) #TODO YOU ARE HERE.
+
+    return res
