@@ -11,7 +11,7 @@ import os
 
 def extract_all_post_data_from_file(post_file_path, base_out_path="/home/ndg/projects/shared_datasets/reddit-style/"):
     """
-    Given a post file, turn it into a csv file with columns ["post_id", "author", "karma", "subreddit"]
+    Given a post file, turn it into a csv file with columns ["post_id", "author", "karma", "subreddit", "created_time"]
     :param post_file_path:
     :param base_out_path:
     :return:
@@ -23,7 +23,7 @@ def extract_all_post_data_from_file(post_file_path, base_out_path="/home/ndg/pro
     with open(post_metadata_path, "wb") as pm:
         pm_writer = csv.writer(pm, delimiter=',',
                                quotechar='|', quoting=csv.QUOTE_MINIMAL)
-        pm_writer.writerow(["post_id", "author", "karma", "subreddit"])
+        pm_writer.writerow(["post_id", "author", "karma", "subreddit", "created_time"])
 
         print post_file_path
         fop = open(post_file_path, 'rb')
@@ -34,10 +34,11 @@ def extract_all_post_data_from_file(post_file_path, base_out_path="/home/ndg/pro
                 author = post["author"]
                 karma = post["score"]
                 subreddit = post["subreddit"]
+                created_time = post["created_time"]
             except:
                 continue
 
-            pm_writer.writerow([post_id, author, karma, subreddit])
+            pm_writer.writerow([post_id, author, karma, subreddit, created_time])
 
 
 # TODO: leave in repeats??
@@ -78,7 +79,7 @@ def extract_all_comment_data_from_file(comment_file_path, base_out_path="/home/n
                                 quotechar='|', quoting=csv.QUOTE_MINIMAL)
 
         cm_writer.writerow(["comment_id", "author", "parent_id",
-                               "parent_author", "karma", "subreddit"])
+                               "parent_author", "karma", "subreddit", "created_time"])
         ntlc_writer.writerow(["comment_json"])
         tlc_writer.writerow(["parent_comment_json", "child_comment_json"])
 
@@ -111,6 +112,7 @@ def extract_all_comment_data_from_file(comment_file_path, base_out_path="/home/n
             short_parent_id = comm["parent_id"][3:] #get rid of t3/t1
             karma = comm["score"]
             subreddit = comm["subreddit"]
+            created_time = comm["created_time"]
 
             if short_parent_id in tl_comments:
                 tlc_writer.writerow([tl_comments[short_parent_id], line.strip()])
@@ -123,13 +125,13 @@ def extract_all_comment_data_from_file(comment_file_path, base_out_path="/home/n
                 parent_author = None #top level comments that don't have a parent
 
             cm_writer.writerow([comm_id, author, short_parent_id,
-                                parent_author, karma, subreddit])
+                                parent_author, karma, subreddit, created_time])
 
     fop.close()
 
 def list_file_appropriate_data_range(start_year, start_month, end_month, base_path_full, posts=False):
     """
-    Get the processed files for the given date range
+    Get the processed files for the given date range. end month inclusive.
     :param start_year:
     :param start_month:
     :param end_month:
@@ -147,7 +149,7 @@ def list_file_appropriate_data_range(start_year, start_month, end_month, base_pa
     else:
         for month in range(start_month, end_month+1):
             month = '{:02d}'.format(month)
-            paths.append("RC_{}-{}".format(start_year, month))
+            paths.append("RC_{}-{}-01".format(start_year, month))
 
     valid_file_paths = []
     for f in os.listdir(base_path_full):
