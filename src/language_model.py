@@ -2,26 +2,17 @@
 """
 Contains all the methods relevant to creating and accessing subreddit-level languages models.
 """
-from nltk.lm.preprocessing import padded_everygram_pipeline
-from nltk.lm import KneserNeyInterpolated, WittenBellInterpolated
-from nltk.util import everygrams
-from nltk.lm.preprocessing import pad_both_ends
-from nltk.lm.preprocessing import flatten, padded_everygrams
-from nltk.tokenize import sent_tokenize
 from nltk import word_tokenize, sent_tokenize
-import pickle
 import os
 import json
 import csv
 import extract_pairs
-from nltk.util import bigrams, trigrams
-from nltk.lm import Vocabulary
-from nltk.lm.util import log_base2
 import numpy as np
 from collections import defaultdict
 import kenlm
 import subprocess
 import re
+
 def get_relevant_text_bodies(subreddit_list, start_year, start_month, end_month, base_path):
     """
     Given a list of subreddits, returns the appropriate text for those subreddits
@@ -65,33 +56,18 @@ def get_relevant_text_bodies(subreddit_list, start_year, start_month, end_month,
     return text_bodies
 
 
-def load_language_model(subreddit, start_year, start_month, end_month, ngrams, text_min, text_max, base_path):
-    """
-    Loads and returns the language model that
-    :param subreddit_list: list of subreddits
-    :param start_year: year
-    :param start_month: month
-    :param end_month: month
-    :param ngrams: the n of ngrams
-    :param text_min: minimum text length to warrant inclusion
-    :param text_max: maximum text length
-    :param base_path: the project directory. always the same.
-    :return:
-    """
-    language_model_base_path  = base_path + "language_models/"
+def create_language_model(joined_text, file_path, ngrams=3):
+    #subprocess.call('echo {} | ~/kenlm/bin/lmplz -o {} > {}'.format(joined_text, ngrams, file_path), shell=True)
 
-    # TODO: make this global
-    file_name = "{}_{}_{}_{}_{}_{}_{}.klm".format(subreddit, start_year,
-                                                  start_month, end_month,
-                                                  ngrams, text_min, text_max)
-    file_path = language_model_base_path + file_name
-    print file_path
+    with open("temp.txt", "w") as text_file:
+        text_file.write(joined_text)
 
-    if not os.path.isfile(file_path):
-        raise ValueError("the language model has not been created")
-    file_path = language_model_base_path + file_name
-    model = kenlm.LanguageModel(file_path)
-    return model
+    print len(joined_text)
+    subprocess.call('cat temp.txt | ~/kenlm/build/bin/lmplz --skip_symbols --discount_fallback -o {} -S 5G -T /tmp  > {}'.format(ngrams, file_path), shell=True)
+
+    file_path_binary = file_path[:-4]+"klm"
+    subprocess.call("~/kenlm/build/bin/build_binary {} {}".format(file_path, file_path_binary), shell=True)
+
 
 def create_subreddit_language_models(subreddit_list, start_year, start_month, end_month, ngrams, text_min, text_max, base_path):
     """
@@ -108,7 +84,6 @@ def create_subreddit_language_models(subreddit_list, start_year, start_month, en
     :param base_path: the project directory. always the same.
     :return: None
     """
-    # TODO: should you be setting these in the function???
     language_model_base_path  = base_path + "/language_models/"
 
     new_subreddit_list = []
@@ -145,7 +120,6 @@ def create_subreddit_language_models(subreddit_list, start_year, start_month, en
 
         create_language_model(joined_text, file_path, ngrams=ngrams)
 
-# TODO: make this consistent over the whole project..?
 def preprocess_text(text_body, min_length, max_length):
     """
     Given a piece of text, lower it, remove punctuation and remove unicode
@@ -165,22 +139,37 @@ def preprocess_text(text_body, min_length, max_length):
     sents = [' '.join(word_tokenize(sent)) for sent in sent_tokenize(text_body)] #now tokenize those sentences
     return sents
 
+def load_language_model(subreddit, start_year, start_month, end_month, ngrams, text_min, text_max, base_path):
+    """
+    Loads and returns the language model that
+    :param subreddit_list: list of subreddits
+    :param start_year: year
+    :param start_month: month
+    :param end_month: month
+    :param ngrams: the n of ngrams
+    :param text_min: minimum text length to warrant inclusion
+    :param text_max: maximum text length
+    :param base_path: the project directory. always the same.
+    :return:
+    """
+    language_model_base_path  = base_path + "language_models/"
 
-def create_language_model(joined_text, file_path, ngrams=3):
-    #subprocess.call('echo {} | ~/kenlm/bin/lmplz -o {} > {}'.format(joined_text, ngrams, file_path), shell=True)
+    # TODO: make this global
+    file_name = "{}_{}_{}_{}_{}_{}_{}.klm".format(subreddit, start_year,
+                                                  start_month, end_month,
+                                                  ngrams, text_min, text_max)
 
-    with open("temp.txt", "w") as text_file:
-        text_file.write(joined_text)
+    file_path = language_model_base_path + file_name
+    print file_path
 
-    print len(joined_text)
-    subprocess.call('cat temp.txt | ~/kenlm/build/bin/lmplz --skip_symbols --discount_fallback -o {} -S 5G -T /tmp  > {}'.format(ngrams, file_path), shell=True)
-
-    file_path_binary = file_path[:-4]+"klm"
-    subprocess.call("~/kenlm/build/bin/build_binary {} {}".format(file_path, file_path_binary), shell=True)
-
+    if not os.path.isfile(file_path):
+        raise ValueError("the language model has not been created")
+    file_path = language_model_base_path + file_name
+    model = kenlm.LanguageModel(file_path)
+    return model
 
 # TODO: is inverse of entropy a thing??
-def text_scores(texts, lm, ngrams, text_min, text_max):
+def text_scores(texts, lm, text_min, text_max):
     """
     Given a list of texts return a list of their inverse entropy
     :param texts: a list of strings, preprocessed as they were for the language model
@@ -191,8 +180,11 @@ def text_scores(texts, lm, ngrams, text_min, text_max):
     for text in texts:
         text = preprocess_text(text, text_min, text_max)
         text_scores = []
+        if not text:
+            res.append(None)
+            continue
         for sent in text:
             text_scores.append(lm.score(sent))
-        res.append(np.mean(text_scores)) #TODO YOU ARE HERE.
+        res.append(np.mean(text_scores))
 
     return res
