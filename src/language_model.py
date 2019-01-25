@@ -57,7 +57,6 @@ def get_relevant_text_bodies(subreddit_list, start_year, start_month, end_month,
 
 
 def create_language_model(joined_text, file_path, ngrams=3):
-    #subprocess.call('echo {} | ~/kenlm/bin/lmplz -o {} > {}'.format(joined_text, ngrams, file_path), shell=True)
 
     with open("temp.txt", "w") as text_file:
         text_file.write(joined_text)
@@ -174,17 +173,21 @@ def text_scores(texts, lm, text_min, text_max):
     Given a list of texts return a list of their inverse entropy
     :param texts: a list of strings, preprocessed as they were for the language model
     :param lm: the language model
-    :return: a list of  entropys for each text
+    :return: a list of  entropys for each text, plus the number of words in the text
     """
     res = []
+    lengths = []
     for text in texts:
+        text_length = 0
         text = preprocess_text(text, text_min, text_max)
         text_scores = []
         if not text:
             res.append(None)
             continue
         for sent in text:
+            text_length += len(sent.split(" "))
             text_scores.append(lm.score(sent))
         res.append(np.mean(text_scores))
+        lengths.append(text_length)
 
-    return res
+    return res, lengths

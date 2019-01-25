@@ -1,53 +1,14 @@
 """
 This file is where we pull in all the various features, essentially creating the values we will use for stats
 """
-import sklearn
 import language_model
-from collections import defaultdict
 import json
-from sshtunnel import SSHTunnelForwarder
-import pymongo
-import atexit
-import datetime
 import pandas as pd
 import numpy as np
 import extract_pairs
 import get_token_categories
 from collections import Counter, defaultdict
 import csv
-
-def start_server():
-    """
-    Starts the mongo server and will shut it on exit
-    :return:
-    The comment and post cursor objects, can use to run queries.
-    """
-
-    MONGO_HOST = "132.206.3.193"
-    MONGO_DB = "reddit"
-    MONGO_USER = "carmst16"
-
-    server = SSHTunnelForwarder(
-        MONGO_HOST,
-        ssh_pkey="/home/ndg/users/carmst16/.ssh/id_rsa",
-        ssh_username=MONGO_USER,
-        remote_bind_address = ("127.0.0.1", 27017)
-    )
-
-    server.start()
-
-    client = pymongo.MongoClient("127.0.0.1", server.local_bind_port)
-    db = client[MONGO_DB]
-
-    dbcomments = db.comms
-    dbposts = db.posts
-
-    def exit_handler():
-        server.stop()
-
-    atexit.register(exit_handler)
-
-    return dbcomments, dbposts
 
 # TODO: store with HDFStore?  https://realpython.com/fast-flexible-pandas/
 def load_dataframe(year, start_month, end_month, base_path, contribtype="comment"):
@@ -82,28 +43,16 @@ def load_dataframe(year, start_month, end_month, base_path, contribtype="comment
         raise ValueError("Not a valid contribtype")
 
     if not valid_file_paths:
-        raise ValueError("You haven't processed date ranges yet")
+        raise ValueError("You haven't processed these date ranges yet")
 
     big_frame = pd.concat(
         [pd.read_csv(f, sep=',', index_col=0, header=0,
                      dtype={"karma":np.int32}) for f in valid_file_paths])
 
-    big_frame = clean_dataframe(big_frame)
     return big_frame
 
-def clean_dataframe(df):
-    """
-    Cleans the dataframe.
-    :param df:
-    :return: the dataframe. done in place however.
-    """
-    #remove all columns with user="[deleted]"
-    # in place maybe because I don't want to create another
-    df = df[df.author != "[deleted]"]
 
-    return df
-
-def get_category_counts(pairs, relevant_categories):
+def get_category_counts(pairs, relevant_categories, text_min, text_max):
     """
     Gets the relevant category counts for the given texts. Is reasonably efficient.
     :param texts: the texts we want to get category counts for
@@ -123,8 +72,10 @@ def get_category_counts(pairs, relevant_categories):
         pair_category_counts = []
 
         for text in [text1, text2]:
-            sents = language_model.preprocess_text(text, 0, 1000)
-            tokens = [item for sublist in sents for item in sublist]
+            sents = language_model.preprocess_text(text, text_min, text_max)
+            # awkard, cause I copied preprocess from kenlm tutorial.
+            # which reconstructs into sents for output.
+            tokens = [item for sublist in sents for item in sublist.split(" ")]
             counts = Counter(category for token in tokens for category in
                 parse(token))
             category_counts = {cat: counts[cat] for cat in
@@ -136,32 +87,78 @@ def get_category_counts(pairs, relevant_categories):
 
     return all_text_counts
 
-def get_pairs_user_interactions(pairs, df, subreddit):
+# TODO: need to confirm this after new data is generated
+def restrict_df(df, date_limit, subreddit=None):
     """
-    Gets a list of all the interactions in the same order as the pairs passed
-    :param pairs:
+
     :param df:
+    :param date_limit: where date_limit is in unix time.
+    :param subreddit:
+    :return:
+    """
+    print "BEFORE", df.shape
+    restricted_df = df.loc[(df['created_time'] < date_limit)]
+    if subreddit:
+        restricted_df = restricted_df.loc[(restricted_df['subreddit'].eq(subreddit))]
+
+    print "AFTER", df.shape
+    return restricted_df
+
+def get_pairs_interactions_karma_prolificness_date_limited(pairs, comment_df, post_df, subreddit=None):
+    """
+    Gets all data from before each pair
+    :param pairs:
     :param subreddit:
     :return:
     """
 
+    user_prolificness = []
     user_interactions = []
+    user_karma = []
     for pair in pairs:
+
 
         user1 = pair[0]["author"]
         user2 = pair[1]["author"]
+        print user1, user2
+        date_limit = pair[0]["created_time"]
+        comment_df = restrict_df(comment_df, date_limit, subreddit=subreddit)
+        post_df = restrict_df(post_df, date_limit, subreddit=subreddit)
 
-        res = get_user_interactions(user1, user2, df, subreddit)
+        print "restricted dataframes"
 
-        user_interactions.append(res)
+        #interactions
+        res_interactions = get_user_interactions(user1, user2, comment_df)
+        user_interactions.append(res_interactions)
 
-    return user_interactions
+        print "got interactions"
+
+        #prolificness
+        pair_prolificness = []
+        for user in [user1, user2]:
+            res_prolificness = get_user_prolificness(user, comment_df, post_df)
+            pair_prolificness.append(res_prolificness)
+        user_prolificness.append(pair_prolificness)
+
+        print "got prolificness"
+
+        #karma
+        pair_karma = []
+        for user in [user1, user2]:
+            res_karma = get_user_karma(user, comment_df, post_df)
+            pair_karma.append(res_karma)
+        user_karma.append(pair_karma)
+
+        print "got karma"
+
+    return user_interactions, user_karma, user_prolificness
+
 
 # TODO: refactor below to use apply ??
 # TODO: include replies to top-level posts?
-def get_user_interactions(user1, user2, df, subreddit=None):
+def get_user_interactions(user1, user2, df):
     """
-    Gets the number of times two users have interacted in
+    Gets the number of times two users have interacted in the given dataframe.
     :param user1:
     :param user2:
     :param df:
@@ -170,98 +167,32 @@ def get_user_interactions(user1, user2, df, subreddit=None):
     :return:
     """
 
-    if not subreddit:
-        res = df.loc[((df['author'] == user1) & (df['parent_author'] == user2)) |
-           ((df['author'] == user2) & (df['parent_author'] == user1))]
-
-    if subreddit:
-        res = df.loc[((df['author'] == user1) & (df['parent_author'] == user2) & (df['subreddit'] == subreddit)) |
-               ((df['author'] == user2) & (df['parent_author'] == user1) & (df['subreddit'] == subreddit))]
+    res = df.loc[((df['author'] == user1) & (df['parent_author'] == user2)) |
+                 ((df['author'] == user2) & (df['parent_author'] == user1))]
 
     return res.shape[0]
 
 
-def get_pairs_user_prolificness(pairs, comment_df, post_df, subreddit):
-    """
-    Get user prolificness for the pairs list in the same order
-    :param pairs:
-    :param comment_df:
-    :param post_df:
-    :param subreddit:
-    :return:
-    """
-
-    user_prolificness = []
-    for pair in pairs:
-
-        user1 = pair[0]["author"]
-        user2 = pair[1]["author"]
-
-        pair_prolificness = []
-        for user in [user1, user2]:
-
-            res = get_user_prolificness(user, comment_df, post_df, subreddit)
-
-            pair_prolificness.append(res)
-
-        user_prolificness.append(pair_prolificness)
-
-    return user_prolificness
-
-
-def get_user_prolificness(user, comment_df, post_df, subreddit):
+def get_user_prolificness(user, comment_df, post_df):
     """
     Get user prolificness for the data given. Sum of number of comments and posts.
-    If subreddit given will only include data for that subreddit.
     :param user:
     :param comment_df:
     :param post_df:
     :param subreddit:
     :return:
     """
-    if not subreddit:
-        res_comm = comment_df.loc[(comment_df['author'] == user)]
-        res_post = post_df.loc[(post_df['author'] == user)]
+    res_comm = comment_df.loc[(comment_df['author'] == user)].shape[0]
+    res_post = post_df.loc[(post_df['author'] == user)].shape[0]
 
-    if subreddit:
-        res_comm = comment_df.loc[(comment_df['author'] == user) & (comment_df['subreddit'] == subreddit)]
-        res_post = post_df.loc[(post_df['author'] == user) & (post_df['subreddit'] == subreddit)]
+    return res_comm + res_post
 
-    return res_comm.shape[0] + res_post.shape[0]
-
-
-def get_pairs_user_karma(pairs, comment_df, post_df, subreddit):
-    """
-
-    :param pairs:
-    :param comment_df:
-    :param post_df:
-    :param subreddit:
-    :return:
-    """
-
-
-    user_karma = []
-    for pair in pairs:
-
-        user1 = pair[0]["author"]
-        user2 = pair[1]["author"]
-
-        pair_karma = []
-        for user in [user1, user2]:
-            res = get_user_karma(user, comment_df, post_df, subreddit)
-
-            pair_karma.append(res)
-
-        user_karma.append(pair_karma)
-
-    return user_karma
 
 # TODO: double check logic here.
-def get_user_karma(user, comment_df, post_df, subreddit):
+def get_user_karma(user, comment_df, post_df):
     """
-    Get user karma for the given data. If subreddit given get data only for that subreddit
-    Sum of comment and post karma
+    Get user karma for the given data.
+    Tuple of comment and post karma
     :param user:
     :param comment_df:
     :param post_df:
@@ -269,17 +200,14 @@ def get_user_karma(user, comment_df, post_df, subreddit):
     :return:
     """
 
-    if not subreddit:
-        comment_karma = comment_df.loc[(comment_df['author'] == user)]['karma'].sum()
-        post_karma = post_df.loc[(post_df['author'] == user)]['karma'].sum()
-    else:
-        comment_karma = comment_df.loc[(comment_df['author'] == user) & (comment_df['subreddit'] == subreddit)]['karma'].sum()
-        post_karma = post_df.loc[(post_df['author'] == user) & (post_df['subreddit'] == subreddit) ]['karma'].sum()
+    comment_karma = comment_df.loc[(comment_df['author'] == user)]['karma'].sum()
+    post_karma = post_df.loc[(post_df['author'] == user)]['karma'].sum()
 
     return comment_karma, post_karma
 
+
 # TODO: test this.
-def load_pairs(base_path, year, start_month, end_month, subreddits):
+def load_pairs(base_path, year, start_month, end_month, subreddits, num_pairs_cap):
     """
     Loads the parent child pairs found in the given file
     :param file_path:
@@ -298,12 +226,25 @@ def load_pairs(base_path, year, start_month, end_month, subreddits):
             ntlp_reader = csv.reader(f, delimiter=',',
                                    quotechar='|', quoting=csv.QUOTE_MINIMAL)
             ntlp_reader.next()
+
+            count = 0
+
             for line in ntlp_reader:
+
+                if count > num_pairs_cap:
+                    break
+
+                count += 1
+
                 parent = json.loads(line[0])
-                child = json.loads(line[1])
 
                 subreddit = parent["subreddit"]
                 if subreddit not in subreddits:
+                    continue
+
+                child = json.loads(line[1])
+
+                if "deleted" in child["author"] or "deleted" in parent["author"]:
                     continue
 
                 pairs[subreddit].append((parent, child))
@@ -311,91 +252,30 @@ def load_pairs(base_path, year, start_month, end_month, subreddits):
     return pairs
 
 
-
-def get_language_model_match(pairs_list, lm, ngrams, text_min, text_max):
+def get_language_model_match(pairs_list, lm, text_min, text_max):
     """
     Given a list of pairs, get the language model similarity score for the parent in the pair. Parent always comes first.
     :param pairs_list: List of tuples of json objects
     :return: A list of len(pairs_list)
     """
 
-    all_text = []
+    all_text_parent = []
+    all_text_child = []
     for pair in pairs_list:
-        p = pair[0]
-        all_text.append(p["body"])
+        parent_ob = pair[0]
+        child_ob = pair[1]
 
-    res_parent = language_model.text_scores(all_text, lm, ngrams, text_min, text_max)
+        all_text_parent.append(parent_ob["body"])
+        all_text_child.append(child_ob["body"])
 
-    all_text = []
-    for pair in pairs_list:
-        p = pair[1]
-        all_text.append(p["body"])
+    res_parent, lengths_parent = language_model.text_scores(all_text_parent, lm, text_min, text_max)
 
-    res_child = language_model.text_scores(all_text, lm, ngrams, text_min, text_max)
+    res_child, lengths_child = language_model.text_scores(all_text_child, lm, text_min, text_max)
 
-    return zip(res_parent, res_child)
+    return zip(res_parent, res_child), zip(lengths_parent, lengths_child)
 
-def create_query(author, time_period, subreddit):
-    """
-    Creates a mongo query given the params
-    :param author:
-    :param time_period:
-    :param subreddit:
-    :return:
-    """
-
-    query_dict = {}
-    query_dict['author'] = author
-
-    if time_period:
-        start_year, start_month, end_month = time_period
-        start = datetime.datetime(start_year, start_month, 1)
-        end = datetime.datetime(start_year, end_month, 1)
-
-        query_dict['created_time'] = {'$gte': start, '$lt': end}
-
-    if subreddit:
-        query_dict['subreddit'] = subreddit
-
-    return query_dict
-
-#deprecated
-def get_prior_interactions(user1, user2, time_period=None, subreddit=None):
-    """
-    Get the number of times the given users have interacted. If given a time period and/or subreddit, restrict
-    the search to those parameters
-    :param user1: user1
-    :param user2: user2
-    :param time_period: tuple of start year, start month, end month
-    :param subreddit: the subreddit
-    :return: a number
-    """
-    dbcomments, _ = start_server()
-    prior_interactions = 0
-    user_list = [user1, user2]
-    for i in range(len(user_list)):
-        if i == 1:
-            i_r = 0  #this needs help..
-        else:
-            i_r = 1
-        query = create_query(user_list[i], time_period, subreddit)
-        return_fields = {"parent_id":1}
-        poss = dbcomments.find(query, return_fields)
-        for comm in poss:
-            parent_id = comm["parent_id"]
-            if "t1_" in parent_id:
-                comm = dbcomments.find_one({"_id": parent_id[3:]}, {"author": 1})
-                if comm["author"] in user_list[i_r]:
-                    prior_interactions += 1
-    return prior_interactions
-
-
-# TODO: modularize writing to csv so that you can ensure consistentcy
-
-def write_to_csv(subreddits, year, start_month, end_month, ngrams, text_min,
-                 text_max, base_path, relevant_categories, out_file,
-                 user_prolificness_subreddit, user_karma_subreddit,
-                 prior_interaction_subreddit):
+def write_to_csv(subreddits, year, start_month_pairs, end_month_pairs, start_month_metadata, end_month_metadata, ngrams, text_min,
+                 text_max, base_path, relevant_categories, out_file, restrict_to_subreddit_only, num_pairs_cap, num_pairs_min):
     """
     Defines how the various value functions are called and how they are written to csv
     to ensure consistentcy
@@ -415,20 +295,20 @@ def write_to_csv(subreddits, year, start_month, end_month, ngrams, text_min,
     :return:
     """
 
-    comment_df = load_dataframe(year, start_month, end_month,
-                                             base_path)
-    post_df = load_dataframe(year, start_month, end_month,
+    comment_df = load_dataframe(year, start_month_metadata, end_month_metadata,
+                                             base_path, contribtype="comment")
+    post_df = load_dataframe(year, start_month_metadata, end_month_metadata,
                                           base_path, contribtype="post")
 
-    pairs = load_pairs(base_path, year, start_month, end_month,
-                                    subreddits)
+    pairs = load_pairs(base_path, year, start_month_pairs, end_month_pairs,
+                                    subreddits, num_pairs_cap)
 
     print "loaded dataframes and pairs"
 
-    language_model.create_subreddit_language_models(subreddits, year,
-                                                    start_month, end_month,
-                                                    ngrams, text_min, text_max,
-                                                    base_path)
+    # language_model.create_subreddit_language_models(subreddits, year,
+    #                                                 start_month_metadata, end_month_metadata,
+    #                                                 ngrams, text_min, text_max,
+    #                                                 base_path)
 
     # TODO: check that parent is always in the right pace
     categories_per_comment_header = []
@@ -441,13 +321,19 @@ def write_to_csv(subreddits, year, start_month, end_month, ngrams, text_min,
     csv_header_values = ["subreddit",
                          "parent_id",
                          "child_id",
+                         "parent_name",
+                         "child_name",
                          "parent_lm",
                          "child_lm",
                          "parent_user_proflificness",
                          "child_user_prolificness",
-                         "parent_user_karma",
-                         "child_user_karma",
-                         "pair_prior_interactions"
+                         "parent_user_karma_comment",
+                         "parent_user_karma_post",
+                         "child_user_karma_comment",
+                         "child_user_karma_post",
+                         "pair_prior_interactions",
+                         "parent_text_length_words",
+                         "child_text_length_words"
                          ]
 
     csv_header_values = csv_header_values + categories_per_comment_header
@@ -462,40 +348,78 @@ def write_to_csv(subreddits, year, start_month, end_month, ngrams, text_min,
 
             print "processing {} now".format(subreddit)
 
-            lm = language_model.load_language_model(subreddit, year,
-                                                    start_month, end_month,
-                                                    ngrams, text_min,
-                                                    text_max, base_path)
-
             subreddit_pairs = pairs[subreddit]
 
+            if not subreddit_pairs:
+                print "pairs didn't exist"
+                continue
+
+            #TODO: check that you can get rid of this
+            #should already be done in new data but here's a double check
+            #sucks for those who put deleted in their usernames but oh well
+
+
+
+            if len(subreddit_pairs) < num_pairs_min:
+                continue
+
+            #TODO: fix after copy
+            lm_base_path = "/home/ndg/projects/shared_datasets/reddit-style/"
+
+            lm = language_model.load_language_model(subreddit, year,
+                                                    start_month_metadata, end_month_metadata,
+                                                    ngrams, text_min,
+                                                    text_max, lm_base_path)
+
+
+            print "loaded language model"
 
             # next 3 below values are a list of tuples
 
-            pairs_entropy_values = get_language_model_match(subreddit_pairs, lm, ngrams, text_min, text_max)
+            pairs_entropy_values, pairs_lengths = get_language_model_match(subreddit_pairs, lm, text_min, text_max)
 
-            pairs_user_prolificness = get_pairs_user_prolificness(
-                subreddit_pairs, comment_df, post_df,
-                user_prolificness_subreddit
-            )
+            print "got entropy values"
 
-            pairs_user_karma = get_pairs_user_karma(
-                subreddit_pairs, comment_df, post_df, user_karma_subreddit
-            )
 
-            # just a simple list
-            pairs_prior_interactions = get_pairs_user_interactions(subreddit_pairs,
-                                            comment_df,
-                                            prior_interaction_subreddit)
+            if restrict_to_subreddit_only:
+                restricted_subreddit = subreddit
+            else:
+                restricted_subreddit = None
+
+            pairs_prior_interactions, pairs_user_karma, \
+            pairs_user_prolificness = \
+                get_pairs_interactions_karma_prolificness_date_limited(
+                    subreddit_pairs, comment_df, post_df,
+                    subreddit=restricted_subreddit)
 
             # list of lists of dictionaries
             pairs_category_counts = get_category_counts(
-                subreddit_pairs, relevant_categories)
+                subreddit_pairs, relevant_categories, text_min, text_max)
 
-            # TODO: this could be more efficiently done in the function
+            print "got category counts"
 
             for i in range(len(subreddit_pairs)):
-                pair = subreddit_pairs[i]  # TODO: verify or index better
+                pair = subreddit_pairs[i]
+
+                # TODO: this is error city
+                values = [subreddit,
+                          pair[0]["id"],
+                          pair[1]["id"],
+                          pair[0]["author"],
+                          pair[1]["author"],
+                          pairs_entropy_values[i][0],
+                          pairs_entropy_values[i][1],
+                          pairs_user_prolificness[i][0],
+                          pairs_user_prolificness[i][1],
+                          pairs_user_karma[i][0][0],
+                          pairs_user_karma[i][0][1], #TODO: fix with named tuples
+                          pairs_user_karma[i][1][0],
+                          pairs_user_karma[i][1][1],
+                          pairs_prior_interactions[i],
+                          pairs_lengths[i][0],
+                          pairs_lengths[i][1],
+                          ]
+
                 category_values = []
                 for category in relevant_categories:
                     category_values.append(
@@ -503,31 +427,6 @@ def write_to_csv(subreddits, year, start_month, end_month, ngrams, text_min,
                     category_values.append(
                         pairs_category_counts[i][1][category])
 
-                # TODO: this is error city
-                values = [subreddit,
-                          pair[0]["id"],
-                          pair[1]["id"],
-                          pairs_entropy_values[i][0],
-                          pairs_entropy_values[i][1],
-                          pairs_user_prolificness[i][0],
-                          pairs_user_prolificness[i][1],
-                          pairs_user_karma[i][0],
-                          pairs_user_karma[i][1],
-                          pairs_prior_interactions[i]
-                          ]
-
                 values = values + category_values
 
                 cwriter.writerow(values)
-
-
-### ok so what do you want the binning functions to look like?
-
-## well you want to bin 2d and linearlize? do you do that for all the values?
-
-## mmmm I bet you can deal with all this using fucking pandas
-
-# yeah I think it's better to leave an lookup on how to bin using pandas.
-# may as well do it dynamically and generate heatmaps right from that
-# you can probably also load just some subreddits in pandas.
-# or chop the csv

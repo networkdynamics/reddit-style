@@ -27,7 +27,7 @@ def get_all_jan_2016_data():
 
     #I ran the following
 
-    #"ls -d -1 /home/ndg/arc/reddit/2016/RC_2016-01-*.gz | parallel -j20 --pipe parallel -j100 --no-notice python extract_pairs.py"
+    #"ls -d -1 /home/ndg/arc/reddit/2016/RC_2016-0*.gz | parallel -j20 --pipe parallel -j100 --no-notice python extract_pairs.py"
 
 
 def testing_language_model_match():
@@ -144,7 +144,7 @@ def test_create_language_model_kenlm():
 
 
     texts = ["what is life", "As if anyone claimed it would end the occupation. It was always intended as a symbolic gesture: to not stand in support of oppression.", "this is me at a bank"]
-    res = language_model.text_scores(texts, lm, ngrams, text_min, text_max)
+    res = language_model.text_scores(texts, lm, text_min, text_max)
     print res
 
 
@@ -157,9 +157,9 @@ def create_many_language_models():
     subreddits = content
     year = 2016
     start_month = 1
-    end_month = 1
+    end_month = 4
     ngrams = 5
-    text_min = 5
+    text_min = 0
     text_max = 10000
     base_path = "/home/ndg/projects/shared_datasets/reddit-style/"
     language_model.create_subreddit_language_models(subreddits, year,
@@ -171,26 +171,32 @@ def create_many_language_models():
 # TODO: need to make a file name creation function
 def get_all_values_jan_22():
     """Defines all parameters for the entire experiment"""
-    with open("../data/cohesion_subs.txt") as f:
+    with open("../data/large_subs.txt") as f:
         content = f.readlines()
     content = [x.strip() for x in content]
 
-    subreddits = content
+    subreddits = content[:100]
 
     year = 2016
-    start_month = 1
-    end_month = 1
+
+    start_month_pairs = 4
+    end_month_pairs = 4
+
+    start_month_metadata = 1
+    end_month_metadata = 4
 
     ngrams = 5
-    text_min = 5 # TODO: make sure this is being used in all the right places
+    text_min = 0 # TODO: make sure this is being used in all the right places
     text_max = 10000
+
+    num_pairs_cap = 10000
+    num_pairs_min = 1000
 
     # TODO: are these truly the values that you want?
     # values that define if you restrict value calculation to just a certain
     # subreddit
-    prior_interaction_subreddit = None
-    user_prolificness_subreddit = None
-    user_karma_subreddit = None
+
+    restrict_to_subreddit_only = False
 
     relevant_categories = ["ppron", "i", "we", "you", "shehe", "they" "ipron",
                            "article", "prep", "auxverb",
@@ -199,11 +205,13 @@ def get_all_values_jan_22():
                            "anx", "anger", "sad"]
     base_path = "/home/ndg/projects/shared_datasets/reddit-style/"
 
-    out_file = "/home/ndg/projects/shared_datasets/reddit-style/output_data/cohesion_subs_get_all_values_jan_22_{}_{}_{}_{}_{}_{}.csv".format(year, start_month, end_month, ngrams, text_min, text_max)
+    out_file = "/home/ndg/projects/shared_datasets/reddit-style/output_data/large_subs_get_all_values_jan_23_{}_{}_{}_{}_{}_{}.csv".format(year, start_month_pairs, end_month_pairs, ngrams, text_min, text_max)
 
-    get_features.write_to_csv(subreddits, year, start_month, end_month, ngrams, text_min,
-                              text_max, base_path, relevant_categories, out_file,
-                              user_prolificness_subreddit, user_karma_subreddit,
-                              prior_interaction_subreddit)
+    # language_model.create_subreddit_language_models(subreddits, year,
+    #                                                 start_month_pairs, end_month_pairs,
+    #                                                 ngrams, text_min, text_max,
+    #                                                 base_path)
+    get_features.write_to_csv(subreddits, year, start_month_pairs, end_month_pairs, start_month_metadata, end_month_metadata, ngrams, text_min,
+                              text_max, base_path, relevant_categories, out_file, restrict_to_subreddit_only, num_pairs_cap, num_pairs_min)
 if __name__ == "__main__":
     get_all_values_jan_22()
