@@ -12,6 +12,7 @@ import csv
 import time
 import itertools
 from operator import itemgetter
+import dask.dataframe as dd
 
 # TODO: store with HDFStore?  https://realpython.com/fast-flexible-pandas/
 def load_dataframe(year, start_month, end_month, base_path, contribtype="comment"):
@@ -75,7 +76,7 @@ def load_dataframe(year, start_month, end_month, base_path, contribtype="comment
 
     lines = list(itertools.chain(*lines))
 
-    big_frame = pd.DataFrame(lines, columns=headers)
+    big_frame = dd.DataFrame(lines, columns=headers)
 
     big_frame["created_utc"] = big_frame.created_utc.astype(np.int64)
     big_frame["karma"] = big_frame.karma.astype(np.int32)
