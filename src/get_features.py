@@ -54,12 +54,17 @@ def load_dataframe(year, start_month, end_month, base_path, contribtype="comment
     reader = csv.reader(open(first_file, "rb"))
     line_list = list(reader)
     headers = line_list[0]
+    headers = [str(h) for h in headers]
+
     line_list = line_list[1:]
 
     lines.append(line_list)
 
+    print "creating dataframe"
+
     for f in valid_file_paths[1:]:
         reader = csv.reader(open(f, "rb"))
+        reader.next()
         line_list = list(reader)
 
         lines.append(line_list)
@@ -70,8 +75,12 @@ def load_dataframe(year, start_month, end_month, base_path, contribtype="comment
 
     lines = list(itertools.chain(*lines))
 
-    print "creating dataframe"
     big_frame = pd.DataFrame(lines, columns=headers)
+
+    big_frame["created_utc"] = big_frame.created_utc.astype(np.int64)
+    big_frame["karma"] = big_frame.karma.astype(np.int32)
+
+    print "converted columns"
 
     return big_frame
 
@@ -126,6 +135,7 @@ def restrict_df(df, date_limit, num_months_back, subreddit=None):
     end = date_limit
     start = date_limit - days_in_a_month
 
+
     restricted_df = df.loc[(df['created_utc'].between(start, end))]
     if subreddit:
         restricted_df = restricted_df.loc[(restricted_df['subreddit'].eq(subreddit))]
@@ -140,6 +150,7 @@ def get_pairs_interactions_karma_prolificness_date_limited(pairs, comment_df, po
     :return:
     """
 
+    print "IN MULTI FUNCTION"
     user_prolificness = []
     user_interactions = []
     user_karma = []
@@ -151,26 +162,27 @@ def get_pairs_interactions_karma_prolificness_date_limited(pairs, comment_df, po
         user1 = pair[0]["author"]
         user2 = pair[1]["author"]
         date_limit = pair[0]["created_utc"]
-        comment_df = restrict_df(comment_df, date_limit, num_months_back, subreddit)
-        post_df = restrict_df(post_df, date_limit, num_months_back, subreddit)
+        res_comment_df = restrict_df(comment_df, date_limit, num_months_back, subreddit)
+        res_post_df = restrict_df(post_df, date_limit, num_months_back, subreddit)
 
         #interactions
-        res_interactions = get_user_interactions(user1, user2, comment_df)
+        res_interactions = get_user_interactions(user1, user2, res_comment_df)
         user_interactions.append(res_interactions)
 
         #prolificness
         pair_prolificness = []
         for user in [user1, user2]:
-            res_prolificness = get_user_prolificness(user, comment_df, post_df)
+            res_prolificness = get_user_prolificness(user, res_comment_df, res_post_df)
             pair_prolificness.append(res_prolificness)
         user_prolificness.append(pair_prolificness)
 
         #karma
         pair_karma = []
         for user in [user1, user2]:
-            res_karma = get_user_karma(user, comment_df, post_df)
+            res_karma = get_user_karma(user, res_comment_df, res_post_df)
             pair_karma.append(res_karma)
         user_karma.append(pair_karma)
+
 
     en = time.time()
     print en - st, len(pairs)
@@ -400,7 +412,7 @@ def write_to_csv(subreddits, year, start_month_pairs, end_month_pairs, ngrams, t
             print "reducing subreddit pairs"
             pair_length = len(subreddit_pairs)
             if pair_length > num_pairs_cap:
-                idx = np.round(np.linspace(0, len(pair_length) - 1, num_pairs_cap)).astype(
+                idx = np.round(np.linspace(0, pair_length - 1, num_pairs_cap)).astype(
                     int)
 
                 subreddit_pairs = itemgetter(*idx)(subreddit_pairs)

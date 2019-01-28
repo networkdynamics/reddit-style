@@ -183,6 +183,7 @@ def text_scores(texts, lm, text_min, text_max):
         text_scores = []
         if not text:
             res.append(None)
+            lengths.append(None)
             continue
         for sent in text:
             text_length += len(sent.split(" "))

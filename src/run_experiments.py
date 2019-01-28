@@ -220,9 +220,58 @@ def partition (list_in, n):
     return [list_in[i * n:(i + 1) * n] for i in
              range((len(list_in) + n - 1) // n)]
 
-def get_all_values_jan_27():
+def get_all_values_test_subs_jan_27():
     """Defines all parameters for the entire experiment"""
-    with open("../data/small_subs.txt") as f:
+    with open("../data/hostile_subs.txt") as f:
+        content = f.readlines()
+    content = [x.strip() for x in content]
+
+#    subreddits = content[:3]
+
+    partitioned_subreddits = [["penguins"]]
+
+    year = 2016
+
+    start_month_pairs = 4
+    end_month_pairs = 4
+
+    num_months_back = 1
+
+    ngrams = 5
+    text_min = 5 # TODO: make sure this is being used in all the right places
+    text_max = 10000
+
+    num_pairs_cap = 5000
+    num_pairs_min = 5
+
+    # TODO: are these truly the values that you want?
+    # values that define if you restrict value calculation to just a certain
+    # subreddit
+
+    restrict_to_subreddit_only = False
+
+    relevant_categories = ["ppron", "i", "we", "you", "shehe", "they" "ipron",
+                           "article", "prep", "auxverb",
+                           "conj", "negate", "verb", "adj", "compare",
+                           "interrog", "number", "quant", "posemo", "negemo",
+                           "anx", "anger", "sad"]
+    base_path = "/home/ndg/projects/shared_datasets/reddit-style/"
+
+    out_file = "/home/ndg/projects/shared_datasets/reddit-style/output_data/TEST_penguin_subs_get_all_values_jan_27_{}_{}_{}_{}_{}_{}.csv".format(year, start_month_pairs, end_month_pairs - num_months_back, ngrams, text_min, text_max)
+
+    # language_model.create_subreddit_language_models(subreddits, year,
+    #                                                 start_month_pairs, end_month_pairs,
+    #                                                 ngrams, text_min, text_max,
+    #                                                 base_path)
+    for subreddits in partitioned_subreddits:
+        print subreddits
+        get_features.write_to_csv(subreddits, year, start_month_pairs, end_month_pairs, ngrams, text_min,
+                              text_max, base_path, relevant_categories, out_file, restrict_to_subreddit_only, num_pairs_cap, num_pairs_min, num_months_back)
+
+
+def get_all_values_hostile_subs_jan_27():
+    """Defines all parameters for the entire experiment"""
+    with open("../data/hostile_subs.txt") as f:
         content = f.readlines()
     content = [x.strip() for x in content]
 
@@ -241,8 +290,8 @@ def get_all_values_jan_27():
     text_min = 5 # TODO: make sure this is being used in all the right places
     text_max = 10000
 
-    num_pairs_cap = 10000
-    num_pairs_min = 10
+    num_pairs_cap = 5000
+    num_pairs_min = 100
 
     # TODO: are these truly the values that you want?
     # values that define if you restrict value calculation to just a certain
@@ -257,16 +306,196 @@ def get_all_values_jan_27():
                            "anx", "anger", "sad"]
     base_path = "/home/ndg/projects/shared_datasets/reddit-style/"
 
-    out_file = "/home/ndg/projects/shared_datasets/reddit-style/output_data/TEST_FULL_large_subs_get_all_values_jan_23_{}_{}_{}_{}_{}_{}.csv".format(year, start_month_pairs, end_month_pairs - num_months_back, ngrams, text_min, text_max)
+    for i in range(len(partitioned_subreddits)):
+        subreddits = partitioned_subreddits[i]
+        print subreddits
+        out_file = "/home/ndg/projects/shared_datasets/reddit-style" \
+                   "/output_data/hostile_subs_{}_get_all_values_jan_27_{}_{" \
+                   "}_{" \
+                   "}_{}_{}_{}.csv".format(i,
+                                              year, start_month_pairs,
+                                              end_month_pairs -
+                                              num_months_back,
+                                              ngrams,
+                                              text_min, text_max)
+
+        get_features.write_to_csv(subreddits, year, start_month_pairs,
+                                  end_month_pairs, ngrams, text_min,
+                                  text_max, base_path, relevant_categories,
+                                  out_file, restrict_to_subreddit_only,
+                                  num_pairs_cap, num_pairs_min,
+                                  num_months_back)
+
+
+def get_all_values_cohesion_subs_27():
+    """Defines all parameters for the entire experiment"""
+    with open("../data/cohesion_subs.txt") as f:
+        content = f.readlines()
+    content = [x.strip() for x in content]
+
+#    subreddits = content[:3]
+
+    partitioned_subreddits = partition(content, 10)
+
+    year = 2016
+
+    start_month_pairs = 4
+    end_month_pairs = 4
+
+    num_months_back = 1
+
+    ngrams = 5
+    text_min = 5 # TODO: make sure this is being used in all the right places
+    text_max = 10000
+
+    num_pairs_cap = 5000
+    num_pairs_min = 100
+
+    # TODO: are these truly the values that you want?
+    # values that define if you restrict value calculation to just a certain
+    # subreddit
+
+    restrict_to_subreddit_only = False
+
+    relevant_categories = ["ppron", "i", "we", "you", "shehe", "they" "ipron",
+                           "article", "prep", "auxverb",
+                           "conj", "negate", "verb", "adj", "compare",
+                           "interrog", "number", "quant", "posemo", "negemo",
+                           "anx", "anger", "sad"]
+    base_path = "/home/ndg/projects/shared_datasets/reddit-style/"
+
+    for i in range(len(partitioned_subreddits)):
+        subreddits = partitioned_subreddits[i]
+        print subreddits
+        out_file = "/home/ndg/projects/shared_datasets/reddit-style" \
+                   "/output_data/cohesion_subs_{}_get_all_values_jan_27_{}_{" \
+                   "}_{" \
+                   "}_{}_{}_{}.csv".format(i,
+                                              year, start_month_pairs,
+                                              end_month_pairs -
+                                              num_months_back,
+                                              ngrams,
+                                              text_min, text_max)
+
+        get_features.write_to_csv(subreddits, year, start_month_pairs,
+                                  end_month_pairs, ngrams, text_min,
+                                  text_max, base_path, relevant_categories,
+                                  out_file, restrict_to_subreddit_only,
+                                  num_pairs_cap, num_pairs_min,
+                                  num_months_back)
+
+
+def get_all_values_large_subs_27():
+    """Defines all parameters for the entire experiment"""
+    with open("../data/large_subs.txt") as f:
+        content = f.readlines()
+    content = [x.strip() for x in content]
+
+#    subreddits = content[:3]
+
+    partitioned_subreddits = partition(content, 10)
+
+    year = 2016
+
+    start_month_pairs = 4
+    end_month_pairs = 4
+
+    num_months_back = 1
+
+    ngrams = 5
+    text_min = 5 # TODO: make sure this is being used in all the right places
+    text_max = 10000
+
+    num_pairs_cap = 5000
+    num_pairs_min = 100
+
+    # TODO: are these truly the values that you want?
+    # values that define if you restrict value calculation to just a certain
+    # subreddit
+
+    restrict_to_subreddit_only = False
+
+    relevant_categories = ["ppron", "i", "we", "you", "shehe", "they" "ipron",
+                           "article", "prep", "auxverb",
+                           "conj", "negate", "verb", "adj", "compare",
+                           "interrog", "number", "quant", "posemo", "negemo",
+                           "anx", "anger", "sad"]
+    base_path = "/home/ndg/projects/shared_datasets/reddit-style/"
+
+    for i in range(len(partitioned_subreddits)):
+        subreddits = partitioned_subreddits[i]
+        print subreddits
+        out_file = "/home/ndg/projects/shared_datasets/reddit-style" \
+                   "/output_data/large_subs_{}_get_all_values_jan_27_{}_{" \
+                   "}_{" \
+                   "}_{}_{}_{}.csv".format(i,
+                                              year, start_month_pairs,
+                                              end_month_pairs -
+                                              num_months_back,
+                                              ngrams,
+                                              text_min, text_max)
+
+        get_features.write_to_csv(subreddits, year, start_month_pairs,
+                                  end_month_pairs, ngrams, text_min,
+                                  text_max, base_path, relevant_categories,
+                                  out_file, restrict_to_subreddit_only,
+                                  num_pairs_cap, num_pairs_min,
+                                  num_months_back)
+
+
+def get_all_values_support_subs_27():
+    """Defines all parameters for the entire experiment"""
+    with open("../data/support_subs.txt") as f:
+        content = f.readlines()
+    content = [x.strip() for x in content]
+
+#    subreddits = content[:3]
+
+    partitioned_subreddits = partition(content, 10)
+
+    year = 2016
+
+    start_month_pairs = 4
+    end_month_pairs = 4
+
+    num_months_back = 1
+
+    ngrams = 5
+    text_min = 5 # TODO: make sure this is being used in all the right places
+    text_max = 10000
+
+    num_pairs_cap = 5000
+    num_pairs_min = 100
+
+    # TODO: are these truly the values that you want?
+    # values that define if you restrict value calculation to just a certain
+    # subreddit
+
+    restrict_to_subreddit_only = False
+
+    relevant_categories = ["ppron", "i", "we", "you", "shehe", "they" "ipron",
+                           "article", "prep", "auxverb",
+                           "conj", "negate", "verb", "adj", "compare",
+                           "interrog", "number", "quant", "posemo", "negemo",
+                           "anx", "anger", "sad"]
+    base_path = "/home/ndg/projects/shared_datasets/reddit-style/"
+
 
     # language_model.create_subreddit_language_models(subreddits, year,
     #                                                 start_month_pairs, end_month_pairs,
     #                                                 ngrams, text_min, text_max,
     #                                                 base_path)
-    for subreddits in partitioned_subreddits:
+    for i in range(len(partitioned_subreddits)):
+        subreddits = partitioned_subreddits[i]
         print subreddits
+        out_file = "/home/ndg/projects/shared_datasets/reddit-style" \
+                   "/output_data/support_subs_{}_get_all_values_jan_27_{}_{}_{" \
+                   "}_{}_{}_{}.csv".format(i,
+            year, start_month_pairs, end_month_pairs - num_months_back, ngrams,
+            text_min, text_max)
+
         get_features.write_to_csv(subreddits, year, start_month_pairs, end_month_pairs, ngrams, text_min,
                               text_max, base_path, relevant_categories, out_file, restrict_to_subreddit_only, num_pairs_cap, num_pairs_min, num_months_back)
 
 if __name__ == "__main__":
-    get_all_values_jan_27()
+    get_all_values_hostile_subs_jan_27()
