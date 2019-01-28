@@ -9,6 +9,9 @@ import extract_pairs
 import get_token_categories
 from collections import Counter, defaultdict
 import csv
+import time
+import itertools
+from operator import itemgetter
 
 # TODO: store with HDFStore?  https://realpython.com/fast-flexible-pandas/
 def load_dataframe(year, start_month, end_month, base_path, contribtype="comment"):
@@ -45,9 +48,30 @@ def load_dataframe(year, start_month, end_month, base_path, contribtype="comment
     if not valid_file_paths:
         raise ValueError("You haven't processed these date ranges yet")
 
-    big_frame = pd.concat(
-        [pd.read_csv(f, sep=',', index_col=0, header=0,
-                     dtype={"karma":np.int32}) for f in valid_file_paths])
+    lines = []
+
+    first_file = valid_file_paths[0]
+    reader = csv.reader(open(first_file, "rb"))
+    line_list = list(reader)
+    headers = line_list[0]
+    line_list = line_list[1:]
+
+    lines.append(line_list)
+
+    for f in valid_file_paths[1:]:
+        reader = csv.reader(open(f, "rb"))
+        line_list = list(reader)
+
+        lines.append(line_list)
+
+    #TODO: MUST FIX THIS. BAD PREPROCESSING
+    if "post" in contribtype:
+        headers[-1] = "created_utc"
+
+    lines = list(itertools.chain(*lines))
+
+    print "creating dataframe"
+    big_frame = pd.DataFrame(lines, columns=headers)
 
     return big_frame
 
@@ -88,7 +112,7 @@ def get_category_counts(pairs, relevant_categories, text_min, text_max):
     return all_text_counts
 
 # TODO: need to confirm this after new data is generated
-def restrict_df(df, date_limit, subreddit=None):
+def restrict_df(df, date_limit, num_months_back, subreddit=None):
     """
 
     :param df:
@@ -96,15 +120,19 @@ def restrict_df(df, date_limit, subreddit=None):
     :param subreddit:
     :return:
     """
-    print "BEFORE", df.shape
-    restricted_df = df.loc[(df['created_time'] < date_limit)]
+
+    days_in_a_month = num_months_back*24*60*60
+
+    end = date_limit
+    start = date_limit - days_in_a_month
+
+    restricted_df = df.loc[(df['created_utc'].between(start, end))]
     if subreddit:
         restricted_df = restricted_df.loc[(restricted_df['subreddit'].eq(subreddit))]
 
-    print "AFTER", df.shape
     return restricted_df
 
-def get_pairs_interactions_karma_prolificness_date_limited(pairs, comment_df, post_df, subreddit=None):
+def get_pairs_interactions_karma_prolificness_date_limited(pairs, comment_df, post_df, num_months_back, subreddit=None):
     """
     Gets all data from before each pair
     :param pairs:
@@ -115,23 +143,20 @@ def get_pairs_interactions_karma_prolificness_date_limited(pairs, comment_df, po
     user_prolificness = []
     user_interactions = []
     user_karma = []
+    st = time.time()
+
     for pair in pairs:
 
 
         user1 = pair[0]["author"]
         user2 = pair[1]["author"]
-        print user1, user2
-        date_limit = pair[0]["created_time"]
-        comment_df = restrict_df(comment_df, date_limit, subreddit=subreddit)
-        post_df = restrict_df(post_df, date_limit, subreddit=subreddit)
-
-        print "restricted dataframes"
+        date_limit = pair[0]["created_utc"]
+        comment_df = restrict_df(comment_df, date_limit, num_months_back, subreddit)
+        post_df = restrict_df(post_df, date_limit, num_months_back, subreddit)
 
         #interactions
         res_interactions = get_user_interactions(user1, user2, comment_df)
         user_interactions.append(res_interactions)
-
-        print "got interactions"
 
         #prolificness
         pair_prolificness = []
@@ -140,8 +165,6 @@ def get_pairs_interactions_karma_prolificness_date_limited(pairs, comment_df, po
             pair_prolificness.append(res_prolificness)
         user_prolificness.append(pair_prolificness)
 
-        print "got prolificness"
-
         #karma
         pair_karma = []
         for user in [user1, user2]:
@@ -149,7 +172,8 @@ def get_pairs_interactions_karma_prolificness_date_limited(pairs, comment_df, po
             pair_karma.append(res_karma)
         user_karma.append(pair_karma)
 
-        print "got karma"
+    en = time.time()
+    print en - st, len(pairs)
 
     return user_interactions, user_karma, user_prolificness
 
@@ -207,7 +231,7 @@ def get_user_karma(user, comment_df, post_df):
 
 
 # TODO: test this.
-def load_pairs(base_path, year, start_month, end_month, subreddits, num_pairs_cap):
+def load_pairs(base_path, year, start_month, end_month, subreddits, num_pairs_cap, text_min):
     """
     Loads the parent child pairs found in the given file
     :param file_path:
@@ -220,26 +244,31 @@ def load_pairs(base_path, year, start_month, end_month, subreddits, num_pairs_ca
                                                         base_path_full)
 
     pairs = defaultdict(lambda: [])
+    subreddit_continue = defaultdict(lambda: True)
+    subreddit_count = defaultdict(lambda: 0)
+
+    num_files = len(valid_file_paths)
+    # allow two times the max, in case less in one file (likely due to time
+    # zones)
+    num_per_file = (num_pairs_cap / num_files) * 2
 
     for file_path in valid_file_paths:
+
         with open(file_path, "rb") as f:
             ntlp_reader = csv.reader(f, delimiter=',',
                                    quotechar='|', quoting=csv.QUOTE_MINIMAL)
             ntlp_reader.next()
 
-            count = 0
-
             for line in ntlp_reader:
-
-                if count > num_pairs_cap:
-                    break
-
-                count += 1
 
                 parent = json.loads(line[0])
 
                 subreddit = parent["subreddit"]
+
                 if subreddit not in subreddits:
+                    continue
+
+                if not subreddit_continue[subreddit]:
                     continue
 
                 child = json.loads(line[1])
@@ -247,8 +276,16 @@ def load_pairs(base_path, year, start_month, end_month, subreddits, num_pairs_ca
                 if "deleted" in child["author"] or "deleted" in parent["author"]:
                     continue
 
+                if len(parent["body"]) < text_min or len(child["body"]) < text_min:
+                    continue
+
                 pairs[subreddit].append((parent, child))
 
+                subreddit_count[subreddit] += 1
+
+                if subreddit_count[subreddit] > num_per_file:
+                    continue
+    print "loaded pairs"
     return pairs
 
 
@@ -274,8 +311,8 @@ def get_language_model_match(pairs_list, lm, text_min, text_max):
 
     return zip(res_parent, res_child), zip(lengths_parent, lengths_child)
 
-def write_to_csv(subreddits, year, start_month_pairs, end_month_pairs, start_month_metadata, end_month_metadata, ngrams, text_min,
-                 text_max, base_path, relevant_categories, out_file, restrict_to_subreddit_only, num_pairs_cap, num_pairs_min):
+def write_to_csv(subreddits, year, start_month_pairs, end_month_pairs, ngrams, text_min,
+                 text_max, base_path, relevant_categories, out_file, restrict_to_subreddit_only, num_pairs_cap, num_pairs_min, num_months_back):
     """
     Defines how the various value functions are called and how they are written to csv
     to ensure consistentcy
@@ -295,20 +332,24 @@ def write_to_csv(subreddits, year, start_month_pairs, end_month_pairs, start_mon
     :return:
     """
 
+    end_month_metadata = end_month_pairs
+    start_month_metadata = end_month_pairs - num_months_back
+
+    pairs = load_pairs(base_path, year, start_month_pairs, end_month_pairs,
+                                    subreddits, num_pairs_cap, text_min)
+
+
     comment_df = load_dataframe(year, start_month_metadata, end_month_metadata,
                                              base_path, contribtype="comment")
     post_df = load_dataframe(year, start_month_metadata, end_month_metadata,
                                           base_path, contribtype="post")
 
-    pairs = load_pairs(base_path, year, start_month_pairs, end_month_pairs,
-                                    subreddits, num_pairs_cap)
-
     print "loaded dataframes and pairs"
 
-    # language_model.create_subreddit_language_models(subreddits, year,
-    #                                                 start_month_metadata, end_month_metadata,
-    #                                                 ngrams, text_min, text_max,
-    #                                                 base_path)
+    language_model.create_subreddit_language_models(subreddits, year,
+                                                    start_month_metadata, end_month_metadata,
+                                                    ngrams, text_min, text_max,
+                                                    base_path)
 
     # TODO: check that parent is always in the right pace
     categories_per_comment_header = []
@@ -354,11 +395,16 @@ def write_to_csv(subreddits, year, start_month_pairs, end_month_pairs, start_mon
                 print "pairs didn't exist"
                 continue
 
-            #TODO: check that you can get rid of this
-            #should already be done in new data but here's a double check
-            #sucks for those who put deleted in their usernames but oh well
+            # sample pairs evenly if needed.
+            print "reducing subreddit pairs"
+            pair_length = len(subreddit_pairs)
+            if pair_length > num_pairs_cap:
+                idx = np.round(np.linspace(0, len(pair_length) - 1, num_pairs_cap)).astype(
+                    int)
 
+                subreddit_pairs = itemgetter(*idx)(subreddit_pairs)
 
+            print "subreddit pair length: ", len(subreddit_pairs)
 
             if len(subreddit_pairs) < num_pairs_min:
                 continue
@@ -389,7 +435,7 @@ def write_to_csv(subreddits, year, start_month_pairs, end_month_pairs, start_mon
             pairs_prior_interactions, pairs_user_karma, \
             pairs_user_prolificness = \
                 get_pairs_interactions_karma_prolificness_date_limited(
-                    subreddit_pairs, comment_df, post_df,
+                    subreddit_pairs, comment_df, post_df, num_months_back,
                     subreddit=restricted_subreddit)
 
             # list of lists of dictionaries
@@ -429,4 +475,14 @@ def write_to_csv(subreddits, year, start_month_pairs, end_month_pairs, start_mon
 
                 values = values + category_values
 
+
+
                 cwriter.writerow(values)
+
+            #force buffer to write every subreddit
+
+            csvfile.flush()
+
+            print "finished writing"
+
+    print "at the end of function!"

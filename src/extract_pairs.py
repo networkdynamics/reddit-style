@@ -148,7 +148,6 @@ def list_file_appropriate_data_range(start_year, start_month, end_month, base_pa
         for month in range(start_month, end_month + 1):
             month = '{:02d}'.format(month)
             paths.append("RS_{}-{}".format(start_year, month))
-
     else:
         for month in range(start_month, end_month+1):
             month = '{:02d}'.format(month)
