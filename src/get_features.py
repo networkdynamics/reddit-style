@@ -333,7 +333,7 @@ def write_to_csv(subreddits, year, start_month_pairs, end_month_pairs, ngrams, t
     """
 
     end_month_metadata = end_month_pairs
-    start_month_metadata = end_month_pairs - num_months_back
+    start_month_metadata = start_month_pairs - num_months_back
 
     pairs = load_pairs(base_path, year, start_month_pairs, end_month_pairs,
                                     subreddits, num_pairs_cap, text_min)
@@ -346,8 +346,9 @@ def write_to_csv(subreddits, year, start_month_pairs, end_month_pairs, ngrams, t
 
     print "loaded dataframes and pairs"
 
+    #language models are using just the same as the pairs
     language_model.create_subreddit_language_models(subreddits, year,
-                                                    start_month_metadata, end_month_metadata,
+                                                    start_month_pairs, end_month_pairs,
                                                     ngrams, text_min, text_max,
                                                     base_path)
 
@@ -413,7 +414,7 @@ def write_to_csv(subreddits, year, start_month_pairs, end_month_pairs, ngrams, t
             lm_base_path = "/home/ndg/projects/shared_datasets/reddit-style/"
 
             lm = language_model.load_language_model(subreddit, year,
-                                                    start_month_metadata, end_month_metadata,
+                                                    start_month_pairs, end_month_pairs,
                                                     ngrams, text_min,
                                                     text_max, lm_base_path)
 
