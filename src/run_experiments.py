@@ -491,11 +491,79 @@ def get_all_values_support_subs_27():
         out_file = "/home/ndg/projects/shared_datasets/reddit-style" \
                    "/output_data/support_subs_{}_get_all_values_jan_27_{}_{}_{" \
                    "}_{}_{}_{}.csv".format(i,
-            year, start_month_pairs, end_month_pairs - num_months_back, ngrams,
+            year, start_month_pairs, start_month_pairs - num_months_back, ngrams,
             text_min, text_max)
 
         get_features.write_to_csv(subreddits, year, start_month_pairs, end_month_pairs, ngrams, text_min,
                               text_max, base_path, relevant_categories, out_file, restrict_to_subreddit_only, num_pairs_cap, num_pairs_min, num_months_back)
 
+def test_dask_large():
+    """Defines all parameters for the entire experiment"""
+    with open("../data/large_subs.txt") as f:
+        content = f.readlines()
+    content = [x.strip() for x in content]
+
+#    subreddits = content[:3]
+
+    partitioned_subreddits = partition(content, 10)
+
+    year = 2016
+
+    start_month_pairs = 4
+    end_month_pairs = 4
+
+    num_months_back = 1
+
+    ngrams = 5
+    text_min = 5 # TODO: make sure this is being used in all the right places
+    text_max = 10000
+
+    num_pairs_cap = 5000
+    num_pairs_min = 100
+
+    # TODO: are these truly the values that you want?
+    # values that define if you restrict value calculation to just a certain
+    # subreddit
+
+    restrict_to_subreddit_only = False
+
+    relevant_categories = ["ppron", "i", "we", "you", "shehe", "they" "ipron",
+                           "article", "prep", "auxverb",
+                           "conj", "negate", "verb", "adj", "compare",
+                           "interrog", "number", "quant", "posemo", "negemo",
+                           "anx", "anger", "sad"]
+    base_path = "/home/ndg/projects/shared_datasets/reddit-style/"
+
+    for i in range(len(partitioned_subreddits)):
+        subreddits = partitioned_subreddits[i]
+        print subreddits
+        out_file = "/home/ndg/projects/shared_datasets/reddit-style" \
+                   "/output_data/TESTDASKlarge_subs_{}_get_all_values_jan_27_{}_{" \
+                   "}_{" \
+                   "}_{}_{}_{}.csv".format(i,
+                                              year, start_month_pairs,
+                                              end_month_pairs -
+                                              num_months_back,
+                                              ngrams,
+                                              text_min, text_max)
+
+        get_features.write_to_csv(subreddits, year, start_month_pairs,
+                                  end_month_pairs, ngrams, text_min,
+                                  text_max, base_path, relevant_categories,
+                                  out_file, restrict_to_subreddit_only,
+                                  num_pairs_cap, num_pairs_min,
+                                  num_months_back)
+
+
+def get_all_2018_data():
+    pass
+
+    #I ran the following
+
+    #ls -d -1 /home/ndg/arc/reddit/2018/RC_2018*.gz | parallel -j20 --pipe parallel -j100 --no-notice python extract_pairs.py
+    #ls -d -1 /home/ndg/arc/reddit_submissions/2018/RS_2018* | parallel -j20 --pipe parallel -j100 --no-notice python extract_pairs_post.py
+
+
+
 if __name__ == "__main__":
-    get_all_values_hostile_subs_jan_27()
+    test_dask_large()

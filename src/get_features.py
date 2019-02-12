@@ -76,7 +76,9 @@ def load_dataframe(year, start_month, end_month, base_path, contribtype="comment
 
     lines = list(itertools.chain(*lines))
 
-    big_frame = dd.DataFrame(lines, columns=headers)
+    lines = np.array(lines)
+
+    big_frame = dd.from_array(lines, columns=headers)
 
     big_frame["created_utc"] = big_frame.created_utc.astype(np.int64)
     big_frame["karma"] = big_frame.karma.astype(np.int32)
@@ -286,11 +288,15 @@ def load_pairs(base_path, year, start_month, end_month, subreddits, num_pairs_ca
 
                 child = json.loads(line[1])
 
+
                 if "deleted" in child["author"] or "deleted" in parent["author"]:
                     continue
 
                 if len(parent["body"]) < text_min or len(child["body"]) < text_min:
                     continue
+
+                if child["author"] == parent["author"]:
+                    continue #no replying to yourself.
 
                 pairs[subreddit].append((parent, child))
 
@@ -298,6 +304,7 @@ def load_pairs(base_path, year, start_month, end_month, subreddits, num_pairs_ca
 
                 if subreddit_count[subreddit] > num_per_file:
                     continue
+
     print "loaded pairs"
     return pairs
 
@@ -323,6 +330,17 @@ def get_language_model_match(pairs_list, lm, text_min, text_max):
     res_child, lengths_child = language_model.text_scores(all_text_child, lm, text_min, text_max)
 
     return zip(res_parent, res_child), zip(lengths_parent, lengths_child)
+
+
+def get_pairs_reference_boolean(pairs_list, reference_ids):
+
+
+    contains_references = []
+    for pair in pairs_list:
+        if pair[0]["_id"] in reference_ids:
+            contains_references.append(1)
+        else:
+            contains_references.append(0)
 
 def write_to_csv(subreddits, year, start_month_pairs, end_month_pairs, ngrams, text_min,
                  text_max, base_path, relevant_categories, out_file, restrict_to_subreddit_only, num_pairs_cap, num_pairs_min, num_months_back):
@@ -357,6 +375,11 @@ def write_to_csv(subreddits, year, start_month_pairs, end_month_pairs, ngrams, t
     post_df = load_dataframe(year, start_month_metadata, end_month_metadata,
                                           base_path, contribtype="post")
 
+    reference_list_file = "/home/ndg/projects/shared_datasets/reddit-legends/all_multi_links_references.txt"
+
+    with open(reference_list_file) as f:
+        reference_ids = [row.split()[0] for row in f]
+
     print "loaded dataframes and pairs"
 
     #language models are using just the same as the pairs
@@ -388,7 +411,8 @@ def write_to_csv(subreddits, year, start_month_pairs, end_month_pairs, ngrams, t
                          "child_user_karma_post",
                          "pair_prior_interactions",
                          "parent_text_length_words",
-                         "child_text_length_words"
+                         "child_text_length_words",
+                         "parent_contains_reference"
                          ]
 
     csv_header_values = csv_header_values + categories_per_comment_header
@@ -452,6 +476,8 @@ def write_to_csv(subreddits, year, start_month_pairs, end_month_pairs, ngrams, t
                     subreddit_pairs, comment_df, post_df, num_months_back,
                     subreddit=restricted_subreddit)
 
+            pairs_contain_references = get_pairs_reference_boolean(subreddit_pairs, reference_ids)
+
             # list of lists of dictionaries
             pairs_category_counts = get_category_counts(
                 subreddit_pairs, relevant_categories, text_min, text_max)
@@ -478,6 +504,7 @@ def write_to_csv(subreddits, year, start_month_pairs, end_month_pairs, ngrams, t
                           pairs_prior_interactions[i],
                           pairs_lengths[i][0],
                           pairs_lengths[i][1],
+                          pairs_contain_references[i]
                           ]
 
                 category_values = []
