@@ -83,6 +83,8 @@ def load_dataframe(year, start_month, end_month, base_path, contribtype="comment
     big_frame["created_utc"] = big_frame.created_utc.astype(np.int64)
     big_frame["karma"] = big_frame.karma.astype(np.int32)
 
+    big_frame = big_frame.persist()
+
     print "converted columns"
 
     return big_frame
@@ -159,8 +161,9 @@ def get_pairs_interactions_karma_prolificness_date_limited(pairs, comment_df, po
     user_karma = []
     st = time.time()
 
-    for pair in pairs:
 
+    #TODO: could really optimize this for dask
+    for pair in pairs:
 
         user1 = pair[0]["author"]
         user2 = pair[1]["author"]
@@ -207,7 +210,7 @@ def get_user_interactions(user1, user2, df):
     """
 
     res = df.loc[((df['author'] == user1) & (df['parent_author'] == user2)) |
-                 ((df['author'] == user2) & (df['parent_author'] == user1))]
+                 ((df['author'] == user2) & (df['parent_author'] == user1))].compute()
 
     return res.shape[0]
 
@@ -221,10 +224,10 @@ def get_user_prolificness(user, comment_df, post_df):
     :param subreddit:
     :return:
     """
-    res_comm = comment_df.loc[(comment_df['author'] == user)].shape[0]
-    res_post = post_df.loc[(post_df['author'] == user)].shape[0]
+    res_comm = comment_df.loc[(comment_df['author'] == user)].compute()
+    res_post = post_df.loc[(post_df['author'] == user)].compute()
 
-    return res_comm + res_post
+    return res_comm.shape[0] + res_post.shape[0]
 
 
 # TODO: double check logic here.
@@ -239,8 +242,8 @@ def get_user_karma(user, comment_df, post_df):
     :return:
     """
 
-    comment_karma = comment_df.loc[(comment_df['author'] == user)]['karma'].sum()
-    post_karma = post_df.loc[(post_df['author'] == user)]['karma'].sum()
+    comment_karma = comment_df.loc[(comment_df['author'] == user)]['karma'].compute().sum()
+    post_karma = post_df.loc[(post_df['author'] == user)]['karma'].compute().sum()
 
     return comment_karma, post_karma
 
@@ -337,10 +340,19 @@ def get_pairs_reference_boolean(pairs_list, reference_ids):
 
     contains_references = []
     for pair in pairs_list:
-        if pair[0]["_id"] in reference_ids:
-            contains_references.append(1)
+        pair_refs = []
+        if pair[0]["id"] in reference_ids:
+            pair_refs.append(1)
         else:
-            contains_references.append(0)
+            pair_refs.append(0)
+        if pair[1]["id"] in reference_ids:
+            pair_refs.append(1)
+        else:
+            pair_refs.append(0)
+
+        contains_references.append(pair_refs)
+
+    return contains_references
 
 def write_to_csv(subreddits, year, start_month_pairs, end_month_pairs, ngrams, text_min,
                  text_max, base_path, relevant_categories, out_file, restrict_to_subreddit_only, num_pairs_cap, num_pairs_min, num_months_back):
@@ -377,14 +389,15 @@ def write_to_csv(subreddits, year, start_month_pairs, end_month_pairs, ngrams, t
 
     reference_list_file = "/home/ndg/projects/shared_datasets/reddit-legends/all_multi_links_references.txt"
 
+    #TODO parameterize properly
     with open(reference_list_file) as f:
-        reference_ids = [row.split()[0] for row in f]
+        reference_ids = [row.split(",")[0] for row in f]
 
     print "loaded dataframes and pairs"
 
     #language models are using just the same as the pairs
     language_model.create_subreddit_language_models(subreddits, year,
-                                                    start_month_pairs, end_month_pairs,
+                                                    start_month_metadata, end_month_metadata,
                                                     ngrams, text_min, text_max,
                                                     base_path)
 
@@ -412,7 +425,8 @@ def write_to_csv(subreddits, year, start_month_pairs, end_month_pairs, ngrams, t
                          "pair_prior_interactions",
                          "parent_text_length_words",
                          "child_text_length_words",
-                         "parent_contains_reference"
+                         "parent_contains_reference",
+                         "child_contains_reference"
                          ]
 
     csv_header_values = csv_header_values + categories_per_comment_header
@@ -504,7 +518,8 @@ def write_to_csv(subreddits, year, start_month_pairs, end_month_pairs, ngrams, t
                           pairs_prior_interactions[i],
                           pairs_lengths[i][0],
                           pairs_lengths[i][1],
-                          pairs_contain_references[i]
+                          pairs_contain_references[i][0],
+                          pairs_contain_references[i][1]
                           ]
 
                 category_values = []

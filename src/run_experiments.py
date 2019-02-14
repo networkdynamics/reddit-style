@@ -458,7 +458,7 @@ def get_all_values_support_subs_27():
     start_month_pairs = 4
     end_month_pairs = 4
 
-    num_months_back = 1
+    num_months_back = 2
 
     ngrams = 5
     text_min = 5 # TODO: make sure this is being used in all the right places
@@ -485,11 +485,12 @@ def get_all_values_support_subs_27():
     #                                                 start_month_pairs, end_month_pairs,
     #                                                 ngrams, text_min, text_max,
     #                                                 base_path)
+    partitioned_subreddits  = [["DeadBedrooms"]]
     for i in range(len(partitioned_subreddits)):
         subreddits = partitioned_subreddits[i]
         print subreddits
         out_file = "/home/ndg/projects/shared_datasets/reddit-style" \
-                   "/output_data/support_subs_{}_get_all_values_jan_27_{}_{}_{" \
+                   "/output_data/TESTsupport_subs_{}_get_all_values_feb_13_{}_{}_{" \
                    "}_{}_{}_{}.csv".format(i,
             year, start_month_pairs, start_month_pairs - num_months_back, ngrams,
             text_min, text_max)
@@ -566,4 +567,4 @@ def get_all_2018_data():
 
 
 if __name__ == "__main__":
-    test_dask_large()
+    get_all_values_support_subs_27()
